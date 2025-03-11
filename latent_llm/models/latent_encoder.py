@@ -174,7 +174,11 @@ class DecoderTransformer(nn.Module):
         self.lm_head = nn.Linear(embed_dim, vocab_size)
 
     def forward(
-        self, x: torch.Tensor, mem_embeds: torch.Tensor, labels: torch.Tensor
+        self,
+        x: torch.Tensor,
+        mem_embeds: torch.Tensor,
+        labels: torch.Tensor,
+        ignore_index: int,
     ) -> torch.Tensor:
         """Compute loss using memory embeddings and input sequence."""
         B, T = x.size()
@@ -189,7 +193,9 @@ class DecoderTransformer(nn.Module):
         logits = self.lm_head(x)
         if labels is not None:
             loss = F.cross_entropy(
-                logits.reshape(-1, logits.size(-1)), labels.reshape(-1)
+                logits.reshape(-1, logits.size(-1)),
+                labels.reshape(-1),
+                ignore_index=ignore_index,
             )
             return logits, loss
         else:

@@ -21,7 +21,7 @@ def cycle(loader):
             yield data
 
 
-DATASET_ID = "meg/fineweb-bias-man-sentences"
+DATASET_ID = "gair-prox/FineWeb-pro"
 
 TOKENIZER = tiktoken.get_encoding("gpt2")
 
@@ -83,7 +83,7 @@ for step in range(TOTAL_STEPS):
     decoder_input = x[:, :-1]  # Remove last token for input
 
     # Pass to decoder
-    logits, loss = DECODER(decoder_input, mem_embeds, labels)
+    logits, loss = DECODER(decoder_input, mem_embeds, labels, ignore_index=PADDING)
     loss.backward()
     OPTIMIZER.step()
     if step % LOG_EVERY == 0:
