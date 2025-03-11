@@ -124,8 +124,13 @@ while True:
     OPTIMIZER.step()
     current_step += 1
     PROCESSED_TOKENS += TOKEN_PER_BATCH
+    TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
+
     if current_step % CONFIG.log_interval == 0:
-        logger.info(f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}")
+        logger.info(
+            f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}; {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+        )
+
     if current_step % CONFIG.save_interval == 0:
         logger.info("Saving to hub...")
         ENCODER.push_to_hub(CONFIG.hub_repo_id)
@@ -160,11 +165,7 @@ while True:
             )
         ENCODER.train()
         DECODER.train()
-
-    TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
-    logger.info(
-        f"[{current_step}/{CONFIG.training_steps}] {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
-    )
+        START_TIME = time.time()
 
     if current_step >= CONFIG.training_steps:
         break
