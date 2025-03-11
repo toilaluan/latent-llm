@@ -124,20 +124,58 @@ class LatentDecoder(nn.Module):
         mem_embeds: torch.Tensor,
         input_ids: torch.Tensor,
         max_new_tokens: int,
+        temperature: float = 0.01,
         **kwargs,
     ) -> torch.Tensor:
-        generated_ids = input_ids
+        """Generate text using a more efficient approach with temperature sampling."""
+        B = input_ids.size(0)
+        device = input_ids.device
+        generated_ids = input_ids.clone()
+
+        # Initial input_embeds with memory embeddings
         embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat([mem_embeds, embeds], dim=1)
+
+        # Create attention mask (1 for all tokens)
+        attention_mask = torch.ones(
+            (B, self.n_gist_tokens + input_ids.size(1)), dtype=torch.long, device=device
+        )
+
+        # Generate tokens one by one
         for _ in range(max_new_tokens):
-            logits = self.model(inputs_embeds=embeds).logits
-            logits = logits[:, -1, :]
-            next_token = torch.argmax(logits, dim=-1)
-            if next_token == self.model.config.eos_token_id:
+            # Forward pass
+            outputs = self.model(
+                inputs_embeds=embeds,
+                attention_mask=attention_mask,
+            )
+            logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
+
+            # Sample from the distribution
+            if temperature > 0:
+                probs = torch.softmax(logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1).squeeze(-1)
+            else:
+                next_token = torch.argmax(logits, dim=-1)
+
+            # Stop if all sequences have EOS
+            if (next_token == self.model.config.eos_token_id).all():
                 break
+
+            # Append new tokens
             generated_ids = torch.cat([generated_ids, next_token.unsqueeze(-1)], dim=-1)
-            generated_embeds = self.model.get_input_embeddings()(generated_ids)
-            embeds = torch.cat([mem_embeds, generated_embeds], dim=1)
+
+            # Update input embeddings for next iteration
+            next_token_embeds = self.model.get_input_embeddings()(
+                next_token.unsqueeze(-1)
+            )
+            embeds = torch.cat([embeds, next_token_embeds], dim=1)
+
+            # Update attention mask
+            attention_mask = torch.cat(
+                [attention_mask, torch.ones((B, 1), dtype=torch.long, device=device)],
+                dim=1,
+            )
+
         return generated_ids
 
     def push_to_hub(self, repo_id: str):
