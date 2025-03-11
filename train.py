@@ -168,8 +168,8 @@ while True:
         with torch.no_grad():
             batch = next(iter(DATALOADER))
             generated_ids = DECODER.generate(
-                mem_embeds[:, :1, :],
-                input_ids[:, :1],
+                mem_embeds[:1, :, :],
+                input_ids[:1, :1],
                 max_new_tokens=CONFIG.max_new_tokens,
             )
             completion = TOKENIZER.decode(generated_ids[0])
