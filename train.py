@@ -1,169 +1,139 @@
-import os
+from dataclasses import dataclass
 import torch
-import tiktoken
-import wandb
-import argparse
-from datasets import load_dataset
+from latent_llm.data.text_dataset import TextDataset
+from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from torch.utils.data import DataLoader
+from transformers import AutoTokenizer
+import wandb
+import logging
 
-from latent_llm.models.latent_encoder import EncoderTransformer, DecoderTransformer
-
-# Parse command line arguments
-parser = argparse.ArgumentParser(description="Train a latent language model")
-parser.add_argument(
-    "--n_layers", type=int, default=6, help="Number of transformer layers"
-)
-parser.add_argument("--n_heads", type=int, default=6, help="Number of attention heads")
-parser.add_argument("--embed_dim", type=int, default=384, help="Embedding dimension")
-parser.add_argument("--block_size", type=int, default=1024, help="Context size")
-parser.add_argument("--mem_size", type=int, default=128, help="Memory size")
-parser.add_argument(
-    "--n_datapoints", type=int, default=10000, help="Number of datapoints to use"
-)
-parser.add_argument(
-    "--dataset_id",
-    type=str,
-    default="anothy1/fineweb-edu-cleaned-simplified",
-    help="Dataset ID",
-)
-parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
-parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
-parser.add_argument(
-    "--total_steps", type=int, default=10000, help="Total training steps"
-)
-parser.add_argument(
-    "--generate_every", type=int, default=100, help="Generate samples every N steps"
-)
-parser.add_argument(
-    "--log_every", type=int, default=10, help="Log metrics every N steps"
-)
-parser.add_argument(
-    "--project_name", type=str, default="latent-llm-training", help="W&B project name"
-)
-
-args = parser.parse_args()
-config = vars(args)
-
-# Add vocab_size to config (will be set after tokenizer is loaded)
-config["vocab_size"] = None
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Initialize wandb
-wandb.init(project=config["project_name"], config=config)
-
-# Tokenizer setup
-tokenizer = tiktoken.get_encoding("gpt2")
-config["vocab_size"] = tokenizer.n_vocab
-padding_token = tokenizer.encode("<|endoftext|>", allowed_special={"<|endoftext|>"})[0]
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
-# Data preparation
-def tokenize_function(examples):
-    tokenized_ids = tokenizer.encode_batch(examples["text"])
-    for i in range(len(tokenized_ids)):
-        tokenized_ids[i] = tokenized_ids[i][: config["block_size"]] + [
-            padding_token
-        ] * max(0, config["block_size"] - len(tokenized_ids[i]))
-    return {
-        "input_ids": tokenized_ids,
-    }
-
-
-def collate_fn(batch):
-    return {
-        "input_ids": torch.tensor([item["input_ids"] for item in batch]),
-        "text": [item["text"] for item in batch],
-    }
-
-
-def cycle(loader):
-    while True:
-        for data in loader:
-            yield data
-
-
-# Load and prepare dataset
-dataset = load_dataset(config["dataset_id"], split="train").select(
-    range(config["n_datapoints"])
-)
-dataset = dataset.map(tokenize_function, batched=True)
-dataloader = cycle(
-    DataLoader(
-        dataset, batch_size=config["batch_size"], shuffle=True, collate_fn=collate_fn
+@dataclass
+class TrainingConfig:
+    model_name: str = "HuggingFaceTB/SmolLM2-135M"
+    dataset_id: str = "anothy1/fineweb-edu-cleaned-simplified"
+    split: str = "train"
+    block_size: int = 1024
+    n_gist_tokens: int = 256
+    hub_repo_id: str = "toilaluan/smol-lm-2-135m-latent-encoder"
+    learning_rate: float = 1e-5
+    weight_decay: float = 1e-4
+    max_grad_norm: float = 1.0
+    max_epochs: int = 10
+    batch_size: int = 1
+    num_workers: int = 8
+    seed: int = 42
+    device: str = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
     )
+    precision: str = "16-mixed" if device == "cuda" else "32"
+    log_interval: int = 10
+    validating_interval: int = 100
+    save_interval: int = 1000
+    max_new_tokens: int = 512
+    training_steps: int = 100000
+    wandb_project: str = "latent-llm"
+    limit: int = 1000
+
+
+CONFIG = TrainingConfig()
+wandb.init(project=CONFIG.wandb_project)
+
+print("--- Training Config ---")
+logging.info(CONFIG)
+print("---")
+
+ENCODER = LatentEncoder(CONFIG.model_name, CONFIG.n_gist_tokens)
+DECODER = LatentDecoder(CONFIG.model_name, CONFIG.n_gist_tokens)
+
+ENCODER.to(CONFIG.device)
+DECODER.to(CONFIG.device)
+
+TOKENIZER = AutoTokenizer.from_pretrained(CONFIG.model_name)
+TOKENIZER.pad_token = TOKENIZER.eos_token
+
+
+DATASET = TextDataset(
+    dataset_id=CONFIG.dataset_id,
+    split=CONFIG.split,
+    block_size=CONFIG.block_size,
+    model_name=CONFIG.model_name,
+    limit=CONFIG.limit,
 )
 
-# Model initialization
-encoder = EncoderTransformer(
-    config["vocab_size"],
-    config["embed_dim"],
-    config["n_heads"],
-    config["block_size"],
-    config["n_layers"],
-    config["mem_size"],
-).to(device)
 
-decoder = DecoderTransformer(
-    config["vocab_size"],
-    config["embed_dim"],
-    config["n_heads"],
-    config["block_size"],
-    config["n_layers"],
-).to(device)
-
-optimizer = torch.optim.AdamW(
-    list(encoder.parameters()) + list(decoder.parameters()), lr=config["lr"]
+DATALOADER = DataLoader(
+    DATASET,
+    batch_size=CONFIG.batch_size,
+    shuffle=True,
 )
 
-# Training loop
-for step in range(config["total_steps"]):
-    batch = next(dataloader)
-    optimizer.zero_grad()
-    x = batch["input_ids"].to(device)
 
-    # Get memory embeddings from the full sequence
-    mem_embeds = encoder(x)
+def training_step(batch: torch.Tensor) -> torch.Tensor:
+    input_ids = batch[:, :-1].to(CONFIG.device)
+    labels = batch[:, 1:].to(CONFIG.device)
+    mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
+    logits, loss = DECODER(input_ids, mem_embeds, labels=labels)
+    return loss, mem_embeds, input_ids
 
-    # Prepare inputs and labels for the decoder
-    labels = x[:, 1:]  # Shift right for next-token prediction
-    decoder_input = x[:, :-1]  # Remove last token for input
 
-    # Pass to decoder
-    logits, loss = decoder(
-        decoder_input, mem_embeds, labels, ignore_index=padding_token
-    )
+current_step = 0
+
+ENCODER.train()
+DECODER.train()
+
+for param in DECODER.parameters():
+    param.requires_grad = False
+
+OPTIMIZER = torch.optim.AdamW(
+    list(ENCODER.parameters()),
+    lr=CONFIG.learning_rate,
+    weight_decay=CONFIG.weight_decay,
+)
+
+while True:
+    OPTIMIZER.zero_grad()
+    batch = next(iter(DATALOADER))
+    loss, mem_embeds, input_ids = training_step(batch)
+    wandb.log({"train/loss": loss.item()})
     loss.backward()
-    optimizer.step()
+    OPTIMIZER.step()
+    current_step += 1
+    if current_step % CONFIG.log_interval == 0:
+        logger.info(f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}")
+    if current_step % CONFIG.save_interval == 0:
+        logging.info("Saving to hub...")
+        ENCODER.push_to_hub(CONFIG.hub_repo_id)
 
-    # Logging
-    if step % config["log_every"] == 0:
-        print(f"Step {step}, Loss: {loss.item()}")
-        wandb.log({"loss": loss.item(), "step": step})
+    if current_step % CONFIG.validating_interval == 0:
+        logging.info("Generating...")
+        ENCODER.eval()
+        DECODER.eval()
+        with torch.no_grad():
+            batch = next(iter(DATALOADER))
+            generated_ids = DECODER.generate(
+                mem_embeds[:, :1, :],
+                input_ids[:, :1],
+                max_new_tokens=CONFIG.max_new_tokens,
+            )
+            completion = TOKENIZER.decode(generated_ids[0])
+            label = TOKENIZER.decode(batch[:, 1:][0])
+            # Log completion and input_ids
+            wandb.log(
+                {
+                    "train/completion": wandb.Table(
+                        columns=["Type", "Text"],
+                        data=[["Completion", completion], ["Label", label]],
+                    ),
+                }
+            )
+        ENCODER.train()
+        DECODER.train()
 
-    # Generation for evaluation
-    if step % config["generate_every"] == 0:
-        original_text = batch["text"][0]
-        generated_tokens = decoder.generate(
-            mem_embeds[:1, :, :], x[:1, :1], 100, padding_token
-        )[0].tolist()
-        generated_text = tokenizer.decode(generated_tokens)
-
-        print("#### Original text:")
-        print(original_text[:100])
-        print("#### Generated text:")
-        print(generated_text[:100])
-
-        wandb.log(
-            {
-                "original_text": wandb.Html(original_text[:100]),
-                "generated_text": wandb.Html(generated_text[:100]),
-                "step": step,
-            }
-        )
-
-# Save models at the end of training
-torch.save(encoder.state_dict(), os.path.join(wandb.run.dir, "encoder.pt"))
-torch.save(decoder.state_dict(), os.path.join(wandb.run.dir, "decoder.pt"))
-
-wandb.finish()
+    if current_step >= CONFIG.training_steps:
+        break
