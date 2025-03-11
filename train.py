@@ -52,6 +52,7 @@ DATASET = DATASET.map(tokenize_function, batched=True)
 def collate_fn(batch):
     return {
         "input_ids": torch.tensor([item["input_ids"] for item in batch]),
+        "text": [item["text"] for item in batch],
     }
 
 
@@ -67,7 +68,7 @@ OPTIMIZER = torch.optim.AdamW(
     list(ENCODER.parameters()) + list(DECODER.parameters()), lr=1e-4
 )
 DATALOADER = cycle(
-    DataLoader(DATASET, batch_size=2, shuffle=True, collate_fn=collate_fn)
+    DataLoader(DATASET, batch_size=8, shuffle=True, collate_fn=collate_fn)
 )
 
 for step in range(TOTAL_STEPS):
@@ -89,6 +90,9 @@ for step in range(TOTAL_STEPS):
     if step % LOG_EVERY == 0:
         print(f"Step {step}, Loss: {loss.item()}")
     if step % GENERATE_EVERY == 0:
+        print("#### Original text:")
+        print(batch["text"][0])
+        print("#### Generated text:")
         print(
             TOKENIZER.decode(
                 DECODER.generate(mem_embeds, x[:, :1], 100, PADDING)[0].tolist()
