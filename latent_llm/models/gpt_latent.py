@@ -126,6 +126,9 @@ class LatentDecoder(nn.Module):
         embeds = torch.cat([mem_embeds, embeds], dim=1)
         return self.model.generate(inputs_embeds=embeds, **kwargs)
 
+    def push_to_hub(self, repo_id: str):
+        self.model.push_to_hub(repo_id)
+
 
 if __name__ == "__main__":
     model_name = "HuggingFaceTB/SmolLM2-135M"

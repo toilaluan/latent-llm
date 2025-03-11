@@ -62,7 +62,7 @@ def parse_args():
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--n_gist_tokens", type=int, default=256)
     parser.add_argument(
-        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
+        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent"
     )
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
@@ -222,7 +222,8 @@ def main():
 
         if current_step % config.save_interval == 0:
             logger.info("Saving to hub...")
-            ENCODER.push_to_hub(config.hub_repo_id)
+            ENCODER.push_to_hub(config.hub_repo_id + "-encoder")
+            DECODER.push_to_hub(config.hub_repo_id + "-decoder")
 
         if current_step % config.validating_interval == 0:
             logger.info("Generating...")
