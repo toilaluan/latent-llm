@@ -19,11 +19,12 @@ class LatentEncoder(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
         )
         self.base_config = self.model.config
         self.gist_tokens = nn.Parameter(
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
-        )
+        ).to(torch.bfloat16)
         self.n_gist_tokens = n_gist_tokens
         self.init_weights()
 
@@ -90,6 +91,7 @@ class LatentDecoder(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             attn_implementation="flash_attention_2",
+            torch_dtype=torch.bfloat16,
         )
         self.base_config = self.model.config
         self.n_gist_tokens = n_gist_tokens
