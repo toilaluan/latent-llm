@@ -236,7 +236,7 @@ def main():
                 f"[{current_step}/{config.training_steps}] loss: {loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
 
-        if current_step % config.save_interval == 0:
+        if config.save_interval > 0 and current_step % config.save_interval == 0:
             logger.info("Saving to hub...")
             try:
                 ENCODER.push_to_hub(config.hub_repo_id + "-encoder")
