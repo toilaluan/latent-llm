@@ -14,6 +14,12 @@ import argparse
 accelerator = Accelerator(mixed_precision="bf16")
 
 
+def cycle(dataloader):
+    while True:
+        for batch in dataloader:
+            yield batch
+
+
 # Update logging configuration to use RichHandler
 logging.basicConfig(
     level=logging.INFO, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
@@ -156,6 +162,7 @@ def main():
         batch_size=config.batch_size,
         shuffle=True,
     )
+    DATALOADER = cycle(DATALOADER)
 
     def training_step(batch: torch.Tensor) -> torch.Tensor:
         input_ids = batch[:, :-1].to(accelerator.device)
