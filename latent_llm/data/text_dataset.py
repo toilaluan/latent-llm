@@ -3,6 +3,9 @@ from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 import os
 import torch
+import nltk
+from nltk.corpus import words
+import random
 
 CACHE_DIR = ".training_cache/data"
 NUM_PROC = 16
@@ -57,6 +60,31 @@ class TextDataset(Dataset):
         return torch.tensor(self.dataset[idx]["input_ids"])
 
 
+class RandomTextDataset(Dataset):
+    def __init__(self, model_name: str, block_size: int = 1024):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.block_size = block_size
+        self.vocab = words.words()
+
+    def _random_text(self) -> str:
+        return " ".join(random.choices(self.vocab, k=self.block_size))
+
+    def __len__(self):
+        return 2**31  # Arbitrary large number to simulate an unlimited dataset
+
+    def __getitem__(self, idx):
+        text = self._random_text()
+        input_ids = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.block_size,
+        ).input_ids
+        return torch.tensor(input_ids)
+
+
 if __name__ == "__main__":
     dataset = TextDataset(
         dataset_id="anothy1/fineweb-edu-cleaned-simplified",
@@ -66,3 +94,9 @@ if __name__ == "__main__":
     )
     print(len(dataset))
     print(dataset[0])
+
+    random_dataset = RandomTextDataset(
+        model_name="HuggingFaceTB/SmolLM2-135M", block_size=1024
+    )
+    print(len(random_dataset))
+    print(random_dataset[0])
