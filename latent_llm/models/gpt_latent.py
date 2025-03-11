@@ -54,13 +54,13 @@ class LatentEncoder(nn.Module):
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         self.model.push_to_hub(repo_id)
+        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
+        if not os.path.exists(folder):
+            os.makedirs(folder)
         self.gist_tokens.data.cpu().numpy().tofile(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy"
         )
         hf_api = HfApi()
-        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
-        if not os.path.exists(folder):
-            os.makedirs(folder)
         np.save(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
         )
