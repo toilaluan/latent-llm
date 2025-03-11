@@ -24,12 +24,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TrainingConfig:
     model_name: str = "HuggingFaceTB/SmolLM2-135M"
-    dataset_id: str = "anothy1/fineweb-edu-cleaned-simplified"
+    dataset_id: str = "gair-prox/FineWeb-pro"
     split: str = "train"
-    block_size: int = 1024
+    block_size: int = 256
     n_gist_tokens: int = 256
     hub_repo_id: str = "toilaluan/smol-lm-2-135m-latent-encoder"
-    learning_rate: float = 1e-5
+    learning_rate: float = 1e-4
     weight_decay: float = 1e-4
     max_grad_norm: float = 1.0
     max_epochs: int = 10
@@ -48,7 +48,7 @@ class TrainingConfig:
     max_new_tokens: int = 512
     training_steps: int = 100000
     wandb_project: str = "latent-llm"
-    limit: int = 1000
+    limit: int = 1000000
 
 
 CONFIG = TrainingConfig()
