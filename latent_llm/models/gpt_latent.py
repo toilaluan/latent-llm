@@ -131,7 +131,9 @@ class LatentDecoder(nn.Module):
             logits = self.model(inputs_embeds=embeds).logits
             logits = logits[:, -1, :]
             next_token = torch.argmax(logits, dim=-1)
-            generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+            if next_token == self.model.config.eos_token_id:
+                break
+            generated_ids = torch.cat([generated_ids, next_token.unsqueeze(-1)], dim=-1)
             generated_embeds = self.model.get_input_embeddings()(generated_ids)
             embeds = torch.cat([mem_embeds, generated_embeds], dim=1)
         return generated_ids
