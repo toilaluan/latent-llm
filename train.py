@@ -222,8 +222,11 @@ def main():
 
         if current_step % config.save_interval == 0:
             logger.info("Saving to hub...")
-            ENCODER.push_to_hub(config.hub_repo_id + "-encoder")
-            DECODER.push_to_hub(config.hub_repo_id + "-decoder")
+            try:
+                ENCODER.push_to_hub(config.hub_repo_id + "-encoder")
+                DECODER.push_to_hub(config.hub_repo_id + "-decoder")
+            except Exception as e:
+                logger.error(f"Error pushing to hub: {e}")
 
         if current_step % config.validating_interval == 0:
             logger.info("Generating...")
