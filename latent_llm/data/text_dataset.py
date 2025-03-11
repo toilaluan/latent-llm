@@ -5,7 +5,7 @@ import os
 import torch
 
 CACHE_DIR = ".training_cache/data"
-NUM_PROC = 8
+NUM_PROC = 16
 
 if not os.path.exists(CACHE_DIR):
     os.makedirs(CACHE_DIR)
@@ -21,7 +21,9 @@ class TextDataset(Dataset):
         block_size: int = 1024,
         cache_dir: str = CACHE_DIR,
     ):
-        self.dataset = load_dataset(dataset_id, split=split).select(range(limit))
+        self.dataset = load_dataset(dataset_id, split=split, num_proc=NUM_PROC).select(
+            range(limit)
+        )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.block_size = block_size
