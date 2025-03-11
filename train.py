@@ -144,9 +144,9 @@ for step in range(config["total_steps"]):
     # Generation for evaluation
     if step % config["generate_every"] == 0:
         original_text = batch["text"][0]
-        generated_tokens = decoder.generate(mem_embeds, x[:, :1], 100, padding_token)[
-            0
-        ].tolist()
+        generated_tokens = decoder.generate(
+            mem_embeds[:1, :, :], x[:1, :1], 100, padding_token
+        )[0].tolist()
         generated_text = tokenizer.decode(generated_tokens)
 
         print("#### Original text:")
