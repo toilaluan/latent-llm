@@ -44,9 +44,9 @@ class TrainingConfig:
     precision: str = "16-mixed" if device == "cuda" else "32"
     log_interval: int = 10
     validating_interval: int = 100
-    save_interval: int = 1000
+    save_interval: int = 1_000
     max_new_tokens: int = 512
-    training_steps: int = 100000
+    training_steps: int = 100_000
     wandb_project: str = "latent-llm"
     limit: int = -1
 
@@ -98,6 +98,15 @@ def count_parameters(model):
     return trainable_params, total_params
 
 
+current_step = 0
+
+ENCODER.train()
+DECODER.train()
+
+for param in DECODER.parameters():
+    param.requires_grad = False
+
+
 # Log the number of parameters
 encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
 decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
@@ -117,14 +126,6 @@ wandb.log(
         "decoder/total_params": decoder_total_params,
     }
 )
-
-current_step = 0
-
-ENCODER.train()
-DECODER.train()
-
-for param in DECODER.parameters():
-    param.requires_grad = False
 
 OPTIMIZER = torch.optim.AdamW(
     list(ENCODER.parameters()),
