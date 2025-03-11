@@ -169,7 +169,7 @@ while True:
             batch = next(iter(DATALOADER))
             generated_ids = DECODER.generate(
                 mem_embeds[:1, :, :],
-                input_ids[:1, :1],
+                input_ids[:1, :1],  # Seed token
                 max_new_tokens=CONFIG.max_new_tokens,
             )
             completion = TOKENIZER.decode(generated_ids[0])
