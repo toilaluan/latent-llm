@@ -24,13 +24,14 @@ class LatentEncoder(nn.Module):
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
         )
         self.n_gist_tokens = n_gist_tokens
+        self.ae_token = nn.Parameter(torch.randn(1, self.base_config.hidden_size))
         self.init_weights()
 
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens)
 
     def get_trainable_parameters(self):
-        return [self.gist_tokens, *self.model.parameters()]
+        return [self.gist_tokens, self.ae_token, *self.model.parameters()]
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
@@ -53,7 +54,9 @@ class LatentEncoder(nn.Module):
             output_hidden_states=True,
             attention_mask=masks,
         ).hidden_states[-1]
-        return last_hidden_states[:, -self.n_gist_tokens :, :]
+        gisted_embeds = last_hidden_states[:, -self.n_gist_tokens :, :]
+        ae_embeds = self.ae_token.repeat(B, 1, 1)
+        return torch.cat([gisted_embeds, ae_embeds], dim=1)
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         self.model.push_to_hub(repo_id)
@@ -63,6 +66,7 @@ class LatentEncoder(nn.Module):
         self.gist_tokens.data.cpu().numpy().tofile(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy"
         )
+        self.ae_token.data.cpu().numpy().tofile(f"{ckpt_dir}/{repo_id}/ae_token.npy")
         hf_api = HfApi()
         np.save(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
@@ -71,6 +75,11 @@ class LatentEncoder(nn.Module):
             repo_id=repo_id,
             path_or_fileobj=f"{ckpt_dir}/{repo_id}/gist_tokens.npy",
             path_in_repo="gist_tokens.npy",
+        )
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=f"{ckpt_dir}/{repo_id}/ae_token.npy",
+            path_in_repo="ae_token.npy",
         )
 
     def load_pretrained(self, repo_id: str):
@@ -81,6 +90,11 @@ class LatentEncoder(nn.Module):
             path_in_repo="gist_tokens.npy",
         )
         self.gist_tokens.data = torch.from_numpy(np.load(gist_tokens))
+        ae_token = hf_api.download_file(
+            repo_id=repo_id,
+            path_in_repo="ae_token.npy",
+        )
+        self.ae_token.data = torch.from_numpy(np.load(ae_token))
 
 
 class LatentDecoder(nn.Module):
