@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import torch
-from latent_llm.data.text_dataset import TextDataset
+from latent_llm.data.text_dataset import TextDataset, RandomTextDataset
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
@@ -27,6 +27,7 @@ class TrainingConfig:
     model_name: str = "HuggingFaceTB/SmolLM2-135M"
     dataset_id: str = "BEE-spoke-data/fineweb-100k_en-med"
     split: str = "train"
+    dataset_type: str = "text"
     block_size: int = 256
     n_gist_tokens: int = 256
     hub_repo_id: str = "toilaluan/smol-lm-2-135m-latent-encoder"
@@ -55,6 +56,7 @@ class TrainingConfig:
 def parse_args():
     parser = argparse.ArgumentParser(description="Training script for latent LLM.")
     parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM2-135M")
+    parser.add_argument("--dataset_type", type=str, default="text")
     parser.add_argument(
         "--dataset_id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
     )
@@ -101,6 +103,7 @@ def main():
         model_name=args.model_name,
         dataset_id=args.dataset_id,
         split=args.split,
+        dataset_type=args.dataset_type,
         block_size=args.block_size,
         n_gist_tokens=args.n_gist_tokens,
         hub_repo_id=args.hub_repo_id,
@@ -134,13 +137,19 @@ def main():
     TOKENIZER = AutoTokenizer.from_pretrained(config.model_name)
     TOKENIZER.pad_token = TOKENIZER.eos_token
 
-    DATASET = TextDataset(
-        dataset_id=config.dataset_id,
-        split=config.split,
-        block_size=config.block_size,
-        model_name=config.model_name,
-        limit=config.limit,
-    )
+    if config.dataset_type == "text":
+        DATASET = TextDataset(
+            dataset_id=config.dataset_id,
+            split=config.split,
+            block_size=config.block_size,
+            model_name=config.model_name,
+            limit=config.limit,
+        )
+    else:
+        DATASET = RandomTextDataset(
+            model_name=config.model_name,
+            block_size=config.block_size,
+        )
 
     DATALOADER = DataLoader(
         DATASET,
