@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TrainingConfig:
     model_name: str = "HuggingFaceTB/SmolLM2-135M"
-    dataset_id: str = "Salesforce/wikitext"
+    dataset_id: str = "BEE-spoke-data/fineweb-100k_en-med"
     split: str = "train"
     block_size: int = 256
     n_gist_tokens: int = 256
