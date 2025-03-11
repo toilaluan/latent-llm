@@ -49,7 +49,6 @@ class LatentEncoder(nn.Module):
             .to(input_ids.device)
             .repeat(B, 1)
         )
-        print(position_ids.size())
         masks = input_ids != pad_token_id
         embeds = torch.cat(
             [
