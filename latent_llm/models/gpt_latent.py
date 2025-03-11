@@ -39,10 +39,15 @@ class LatentEncoder(nn.Module):
         B = input_ids.size(0)
         embeds = self.model.get_input_embeddings()(input_ids)
         position_ids = torch.arange(input_ids.size(1), device=input_ids.device)
-        memory_position_ids = torch.tensor(
-            list(range(0, input_ids.size(1), input_ids.size(1) // self.n_gist_tokens)),
-            device=input_ids.device,
-        )
+        memory_position_ids = []
+        step = max(1, input_ids.size(1) // self.n_gist_tokens)
+        for i in range(len(self.n_gist_tokens)):
+            memory_position_ids.append(
+                torch.tensor(
+                    list(range(0, input_ids.size(1), step)), device=input_ids.device
+                )
+            )
+        memory_position_ids = torch.cat(memory_position_ids, dim=0)
         position_ids = torch.cat([memory_position_ids, position_ids], dim=0).to(
             input_ids.device
         )
