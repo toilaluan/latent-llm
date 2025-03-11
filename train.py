@@ -8,6 +8,7 @@ import wandb
 import logging
 from rich.logging import RichHandler
 from accelerate import Accelerator
+import time
 
 accelerator = Accelerator()
 
@@ -51,6 +52,7 @@ class TrainingConfig:
 
 
 CONFIG = TrainingConfig()
+TOKEN_PER_BATCH = CONFIG.block_size * CONFIG.batch_size
 wandb.init(project=CONFIG.wandb_project)
 
 print("--- Training Config ---")
@@ -108,6 +110,9 @@ ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
 ENCODER.to(accelerator.device)
 DECODER.to(accelerator.device)
 
+PROCESSED_TOKENS = 0
+START_TIME = time.time()
+
 while True:
     OPTIMIZER.zero_grad()
     batch = next(iter(DATALOADER))
@@ -116,6 +121,7 @@ while True:
     accelerator.backward(loss)
     OPTIMIZER.step()
     current_step += 1
+    PROCESSED_TOKENS += TOKEN_PER_BATCH
     if current_step % CONFIG.log_interval == 0:
         logger.info(f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}")
     if current_step % CONFIG.save_interval == 0:
@@ -153,5 +159,13 @@ while True:
         ENCODER.train()
         DECODER.train()
 
+    TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
+    logger.info(
+        f"[{current_step}/{CONFIG.training_steps}] {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+    )
+
     if current_step >= CONFIG.training_steps:
+        break
+
+    if PROCESSED_TOKENS >= CONFIG.training_steps:
         break
