@@ -96,7 +96,7 @@ class LatentDecoder(nn.Module):
         mem_embeds: torch.Tensor,
         labels: Optional[torch.Tensor] = None,
         ignore_index: int = -100,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
         assert mem_embeds.size(1) == self.n_gist_tokens
         embeds = self.model.get_input_embeddings()(input_ids)
@@ -115,9 +115,18 @@ class LatentDecoder(nn.Module):
                 labels.reshape(-1),
                 ignore_index=ignore_index,
             )
-            return logits, loss
 
-        return logits, None
+            # Calculate token accuracy
+            predictions = torch.argmax(logits, dim=-1)
+            valid_tokens = labels != ignore_index
+            correct_tokens = torch.eq(predictions, labels) & valid_tokens
+            accuracy = (
+                torch.sum(correct_tokens).float() / torch.sum(valid_tokens).float()
+            )
+
+            return logits, loss, accuracy
+
+        return logits, None, None
 
     def generate(
         self,
@@ -191,8 +200,9 @@ if __name__ == "__main__":
 
     input_ids = torch.randint(0, 100, (1, 10))
     mem_embeds = latent_encoder(input_ids)
-    logits, loss = latent_decoder(input_ids, mem_embeds, labels=input_ids)
+    logits, loss, accuracy = latent_decoder(input_ids, mem_embeds, labels=input_ids)
     print(loss)
+    print(accuracy)
 
     completion = latent_decoder.generate(mem_embeds, input_ids, max_new_tokens=10)
     print(tokenizer.decode(completion[0]))

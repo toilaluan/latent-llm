@@ -168,10 +168,10 @@ def main():
         input_ids = batch[:, :-1].to(accelerator.device)
         labels = batch[:, 1:].to(accelerator.device)
         mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
-        logits, loss = DECODER(
+        logits, loss, token_accuracy = DECODER(
             input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
-        return loss, mem_embeds, input_ids
+        return loss, mem_embeds, input_ids, token_accuracy
 
     def count_parameters(model):
         total_params = sum(p.numel() for p in model.parameters())
@@ -223,8 +223,9 @@ def main():
 
     for batch in DATALOADER:
         OPTIMIZER.zero_grad()
-        loss, mem_embeds, input_ids = training_step(batch)
+        loss, mem_embeds, input_ids, token_accuracy = training_step(batch)
         wandb.log({"train/loss": loss.item()})
+        wandb.log({"train/token_accuracy": token_accuracy.item()})
         accelerator.backward(loss)
         OPTIMIZER.step()
         PROCESSED_TOKENS += config.block_size * config.batch_size
@@ -232,7 +233,7 @@ def main():
 
         if current_step % config.log_interval == 0:
             logger.info(
-                f"[{current_step}/{config.training_steps}] loss: {loss.item()}; {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+                f"[{current_step}/{config.training_steps}] loss: {loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
 
         if current_step % config.save_interval == 0:
