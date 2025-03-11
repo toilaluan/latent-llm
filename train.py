@@ -205,9 +205,8 @@ def main():
     PROCESSED_TOKENS = 0
     START_TIME = time.time()
 
-    while True:
+    for batch in DATALOADER:
         OPTIMIZER.zero_grad()
-        batch = next(iter(DATALOADER))
         loss, mem_embeds, input_ids = training_step(batch)
         wandb.log({"train/loss": loss.item()})
         accelerator.backward(loss)
