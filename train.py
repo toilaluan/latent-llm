@@ -191,7 +191,7 @@ def main():
     )
 
     OPTIMIZER = torch.optim.AdamW(
-        list(ENCODER.parameters()),
+        list(ENCODER.parameters()) + list(DECODER.parameters()),
         lr=config.learning_rate,
         weight_decay=config.weight_decay,
     )
