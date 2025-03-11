@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TrainingConfig:
     model_name: str = "HuggingFaceTB/SmolLM2-135M"
-    dataset_id: str = "gair-prox/FineWeb-pro"
+    dataset_id: str = "Salesforce/wikitext"
     split: str = "train"
     block_size: int = 256
     n_gist_tokens: int = 256
