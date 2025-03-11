@@ -22,6 +22,7 @@ class LatentEncoder(nn.Module):
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
         )
         self.n_gist_tokens = n_gist_tokens
+        self.init_weights()
 
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens)
