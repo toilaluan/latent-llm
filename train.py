@@ -21,7 +21,7 @@ def cycle(loader):
             yield data
 
 
-DATASET_ID = "gair-prox/FineWeb-pro"
+DATASET_ID = "anothy1/fineweb-edu-cleaned-simplified"
 
 TOKENIZER = tiktoken.get_encoding("gpt2")
 
