@@ -83,7 +83,7 @@ class RandomTextDataset(Dataset):
             truncation=True,
             max_length=self.block_size,
         ).input_ids
-        return torch.tensor(input_ids)
+        return input_ids.squeeze(0)
 
 
 if __name__ == "__main__":
