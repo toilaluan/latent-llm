@@ -10,7 +10,7 @@ from rich.logging import RichHandler
 from accelerate import Accelerator
 import time
 
-accelerator = Accelerator()
+accelerator = Accelerator(mixed_precision="bf16")
 
 
 # Update logging configuration to use RichHandler
@@ -86,7 +86,9 @@ def training_step(batch: torch.Tensor) -> torch.Tensor:
     input_ids = batch[:, :-1].to(accelerator.device)
     labels = batch[:, 1:].to(accelerator.device)
     mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
-    logits, loss = DECODER(input_ids, mem_embeds, labels=labels)
+    logits, loss = DECODER(
+        input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
+    )
     return loss, mem_embeds, input_ids
 
 
