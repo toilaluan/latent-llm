@@ -8,6 +8,7 @@ dependencies = [
     "accelerate>=1.4.0",
     "datasets>=3.3.2",
     "einops>=0.8.1",
+    "mnemonic>=0.21",
     "nltk>=3.9.1",
     "numpy>=2.2.3",
     "rich>=13.9.4",

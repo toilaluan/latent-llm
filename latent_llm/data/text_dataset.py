@@ -3,9 +3,10 @@ from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 import os
 import torch
-import nltk
 from nltk.corpus import words
 import random
+from mnemonic import Mnemonic
+
 
 CACHE_DIR = ".training_cache/data"
 NUM_PROC = 16
@@ -65,10 +66,10 @@ class RandomTextDataset(Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.block_size = block_size
-        self.vocab = words.words()
+        self.mnemo = Mnemonic("english")
 
     def _random_text(self) -> str:
-        return " ".join(random.choices(self.vocab, k=self.block_size))
+        return self.mnemo.generate(strength=256)
 
     def __len__(self):
         return 2**31  # Arbitrary large number to simulate an unlimited dataset
