@@ -150,14 +150,14 @@ for step in range(config["total_steps"]):
         generated_text = tokenizer.decode(generated_tokens)
 
         print("#### Original text:")
-        print(original_text)
+        print(original_text[:100])
         print("#### Generated text:")
-        print(generated_text)
+        print(generated_text[:100])
 
         wandb.log(
             {
-                "original_text": wandb.Html(original_text),
-                "generated_text": wandb.Html(generated_text),
+                "original_text": wandb.Html(original_text[:100]),
+                "generated_text": wandb.Html(generated_text[:100]),
                 "step": step,
             }
         )
