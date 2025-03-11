@@ -7,6 +7,10 @@ from transformers import AutoTokenizer
 import wandb
 import logging
 from rich.logging import RichHandler
+from accelerate import Accelerator
+
+accelerator = Accelerator()
+
 
 # Update logging configuration to use RichHandler
 logging.basicConfig(
@@ -56,9 +60,6 @@ print("---")
 ENCODER = LatentEncoder(CONFIG.model_name, CONFIG.n_gist_tokens)
 DECODER = LatentDecoder(CONFIG.model_name, CONFIG.n_gist_tokens)
 
-ENCODER.to(CONFIG.device)
-DECODER.to(CONFIG.device)
-
 TOKENIZER = AutoTokenizer.from_pretrained(CONFIG.model_name)
 TOKENIZER.pad_token = TOKENIZER.eos_token
 
@@ -80,8 +81,8 @@ DATALOADER = DataLoader(
 
 
 def training_step(batch: torch.Tensor) -> torch.Tensor:
-    input_ids = batch[:, :-1].to(CONFIG.device)
-    labels = batch[:, 1:].to(CONFIG.device)
+    input_ids = batch[:, :-1].to(accelerator.device)
+    labels = batch[:, 1:].to(accelerator.device)
     mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
     logits, loss = DECODER(input_ids, mem_embeds, labels=labels)
     return loss, mem_embeds, input_ids
@@ -101,12 +102,18 @@ OPTIMIZER = torch.optim.AdamW(
     weight_decay=CONFIG.weight_decay,
 )
 
+ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
+    ENCODER, DECODER, DATALOADER, OPTIMIZER
+)
+ENCODER.to(accelerator.device)
+DECODER.to(accelerator.device)
+
 while True:
     OPTIMIZER.zero_grad()
     batch = next(iter(DATALOADER))
     loss, mem_embeds, input_ids = training_step(batch)
     wandb.log({"train/loss": loss.item()})
-    loss.backward()
+    accelerator.backward(loss)
     OPTIMIZER.step()
     current_step += 1
     if current_step % CONFIG.log_interval == 0:
