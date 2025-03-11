@@ -121,7 +121,7 @@ class LatentDecoder(nn.Module):
             dim=1,
         )
         logits = self.model(inputs_embeds=embeds).logits
-        logits = logits[:, mem_embeds.size(1) :, :]
+        logits = logits[:, mem_embeds.size(1) - 1 :, :]
         if labels is not None:
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
