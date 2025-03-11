@@ -148,7 +148,6 @@ while True:
     wandb.log({"train/loss": loss.item()})
     accelerator.backward(loss)
     OPTIMIZER.step()
-    current_step += 1
     PROCESSED_TOKENS += TOKEN_PER_BATCH
     TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
 
@@ -195,3 +194,5 @@ while True:
 
     if current_step >= CONFIG.training_steps:
         break
+
+    current_step += 1

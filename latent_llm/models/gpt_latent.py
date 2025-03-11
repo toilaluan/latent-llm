@@ -58,6 +58,12 @@ class LatentEncoder(nn.Module):
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy"
         )
         hf_api = HfApi()
+        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        np.save(
+            f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
+        )
         hf_api.upload_file(
             repo_id=repo_id,
             path_or_fileobj=f"{ckpt_dir}/{repo_id}/gist_tokens.npy",
