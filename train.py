@@ -6,8 +6,13 @@ from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 import wandb
 import logging
+from rich.logging import RichHandler
 
-logging.basicConfig(level=logging.INFO)
+# Update logging configuration to use RichHandler
+logging.basicConfig(
+    level=logging.INFO, format="%(message)s", datefmt="[%X]", handlers=[RichHandler()]
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,7 +50,7 @@ CONFIG = TrainingConfig()
 wandb.init(project=CONFIG.wandb_project)
 
 print("--- Training Config ---")
-logging.info(CONFIG)
+logger.info(CONFIG)
 print("---")
 
 ENCODER = LatentEncoder(CONFIG.model_name, CONFIG.n_gist_tokens)
@@ -107,11 +112,11 @@ while True:
     if current_step % CONFIG.log_interval == 0:
         logger.info(f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}")
     if current_step % CONFIG.save_interval == 0:
-        logging.info("Saving to hub...")
+        logger.info("Saving to hub...")
         ENCODER.push_to_hub(CONFIG.hub_repo_id)
 
     if current_step % CONFIG.validating_interval == 0:
-        logging.info("Generating...")
+        logger.info("Generating...")
         ENCODER.eval()
         DECODER.eval()
         with torch.no_grad():
@@ -133,9 +138,11 @@ while True:
                 }
             )
             logger.info(
-                f"[{current_step}/{CONFIG.training_steps}] completion: {completion}"
+                f"[{current_step}/{CONFIG.training_steps}] completion: {completion[:32]}..."
             )
-            logger.info(f"[{current_step}/{CONFIG.training_steps}] label: {label}")
+            logger.info(
+                f"[{current_step}/{CONFIG.training_steps}] label: {label[:32]}..."
+            )
         ENCODER.train()
         DECODER.train()
 
