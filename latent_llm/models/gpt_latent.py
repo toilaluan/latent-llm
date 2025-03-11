@@ -121,11 +121,20 @@ class LatentDecoder(nn.Module):
         self,
         mem_embeds: torch.Tensor,
         input_ids: torch.Tensor,
+        max_new_tokens: int,
         **kwargs,
     ) -> torch.Tensor:
+        generated_ids = input_ids
         embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat([mem_embeds, embeds], dim=1)
-        return self.model.generate(inputs_embeds=embeds, **kwargs)
+        for _ in range(max_new_tokens):
+            logits = self.model(inputs_embeds=embeds).logits
+            logits = logits[:, -1, :]
+            next_token = torch.argmax(logits, dim=-1)
+            generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+            generated_embeds = self.model.get_input_embeddings()(generated_ids)
+            embeds = torch.cat([mem_embeds, generated_embeds], dim=1)
+        return generated_ids
 
     def push_to_hub(self, repo_id: str):
         self.model.push_to_hub(repo_id)
