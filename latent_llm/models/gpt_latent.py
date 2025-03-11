@@ -38,6 +38,14 @@ class LatentEncoder(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         embeds = self.model.get_input_embeddings()(input_ids)
+        position_ids = torch.arange(input_ids.size(1), device=input_ids.device)
+        memory_position_ids = torch.tensor(
+            list(range(0, input_ids.size(1), input_ids.size(1) // self.n_gist_tokens)),
+            device=input_ids.device,
+        )
+        position_ids = torch.cat([memory_position_ids, position_ids], dim=0).to(
+            input_ids.device
+        )
         masks = input_ids != pad_token_id
         embeds = torch.cat(
             [
@@ -53,6 +61,7 @@ class LatentEncoder(nn.Module):
             inputs_embeds=embeds,
             output_hidden_states=True,
             attention_mask=masks,
+            position_ids=position_ids,
         ).hidden_states[-1]
         gisted_embeds = last_hidden_states[:, -self.n_gist_tokens :, :]
         ae_embeds = self.ae_token.repeat(B, 1, 1)
