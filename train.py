@@ -10,6 +10,10 @@ EMBED_DIM = 384
 BLOCK_SIZE = 1024
 MEM_SIZE = 128
 
+N_DATAPOINTS = 10000
+
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 def cycle(loader):
     while True:
@@ -21,7 +25,7 @@ DATASET_ID = "meg/fineweb-bias-man-sentences"
 
 TOKENIZER = tiktoken.get_encoding("gpt2")
 
-DATASET = load_dataset(DATASET_ID, split="train").select(range(10))
+DATASET = load_dataset(DATASET_ID, split="train").select(range(N_DATAPOINTS))
 
 VOCAB_SIZE = TOKENIZER.n_vocab
 PADDING = TOKENIZER.encode("<|endoftext|>", allowed_special={"<|endoftext|>"})[0]
@@ -53,8 +57,10 @@ def collate_fn(batch):
 
 ENCODER = EncoderTransformer(
     VOCAB_SIZE, EMBED_DIM, N_HEADS, BLOCK_SIZE, N_LAYERS, MEM_SIZE
+).to(DEVICE)
+DECODER = DecoderTransformer(VOCAB_SIZE, EMBED_DIM, N_HEADS, BLOCK_SIZE, N_LAYERS).to(
+    DEVICE
 )
-DECODER = DecoderTransformer(VOCAB_SIZE, EMBED_DIM, N_HEADS, BLOCK_SIZE, N_LAYERS)
 
 
 OPTIMIZER = torch.optim.AdamW(
@@ -67,7 +73,7 @@ DATALOADER = cycle(
 for step in range(TOTAL_STEPS):
     batch = next(DATALOADER)
     OPTIMIZER.zero_grad()
-    x = batch["input_ids"]
+    x = batch["input_ids"].to(DEVICE)
 
     # Get memory embeddings from the full sequence
     mem_embeds = ENCODER(x)
