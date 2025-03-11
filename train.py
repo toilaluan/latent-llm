@@ -103,8 +103,8 @@ current_step = 0
 ENCODER.train()
 DECODER.train()
 
-for param in DECODER.parameters():
-    param.requires_grad = False
+# for param in DECODER.parameters():
+#     param.requires_grad = False
 
 
 # Log the number of parameters
@@ -173,7 +173,7 @@ while True:
                 max_new_tokens=CONFIG.max_new_tokens,
             )
             completion = TOKENIZER.decode(generated_ids[0])
-            label = TOKENIZER.decode(batch[:, 1:][0])
+            label = TOKENIZER.decode(batch[0, :])
             # Log completion and input_ids
             wandb.log(
                 {
