@@ -226,7 +226,7 @@ class DecoderTransformer(nn.Module):
 
         for _ in range(max_length):
             # Get logits for next token
-            logits, _ = self.forward(generated_ids, mem_embeds, None)
+            logits, _ = self.forward(generated_ids, mem_embeds, None, None)
 
             # Focus only on the last token's logits for each sequence
             next_token_logits = logits[:, -1, :]  # [B, vocab_size]
