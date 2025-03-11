@@ -2,28 +2,50 @@ import os
 import torch
 import tiktoken
 import wandb
+import argparse
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
 from latent_llm.models.latent_encoder import EncoderTransformer, DecoderTransformer
 
-# Configuration
-config = {
-    "n_layers": 6,
-    "n_heads": 6,
-    "embed_dim": 384,
-    "block_size": 1024,
-    "mem_size": 128,
-    "n_datapoints": 10000,
-    "dataset_id": "anothy1/fineweb-edu-cleaned-simplified",
-    "vocab_size": None,  # Will be set after tokenizer is loaded
-    "batch_size": 8,
-    "lr": 1e-4,
-    "total_steps": 10000,
-    "generate_every": 100,
-    "log_every": 10,
-    "project_name": "latent-llm-training",
-}
+# Parse command line arguments
+parser = argparse.ArgumentParser(description="Train a latent language model")
+parser.add_argument(
+    "--n_layers", type=int, default=6, help="Number of transformer layers"
+)
+parser.add_argument("--n_heads", type=int, default=6, help="Number of attention heads")
+parser.add_argument("--embed_dim", type=int, default=384, help="Embedding dimension")
+parser.add_argument("--block_size", type=int, default=1024, help="Context size")
+parser.add_argument("--mem_size", type=int, default=128, help="Memory size")
+parser.add_argument(
+    "--n_datapoints", type=int, default=10000, help="Number of datapoints to use"
+)
+parser.add_argument(
+    "--dataset_id",
+    type=str,
+    default="anothy1/fineweb-edu-cleaned-simplified",
+    help="Dataset ID",
+)
+parser.add_argument("--batch_size", type=int, default=8, help="Batch size")
+parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
+parser.add_argument(
+    "--total_steps", type=int, default=10000, help="Total training steps"
+)
+parser.add_argument(
+    "--generate_every", type=int, default=100, help="Generate samples every N steps"
+)
+parser.add_argument(
+    "--log_every", type=int, default=10, help="Log metrics every N steps"
+)
+parser.add_argument(
+    "--project_name", type=str, default="latent-llm-training", help="W&B project name"
+)
+
+args = parser.parse_args()
+config = vars(args)
+
+# Add vocab_size to config (will be set after tokenizer is loaded)
+config["vocab_size"] = None
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
