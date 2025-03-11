@@ -92,6 +92,32 @@ def training_step(batch: torch.Tensor) -> torch.Tensor:
     return loss, mem_embeds, input_ids
 
 
+def count_parameters(model):
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return trainable_params, total_params
+
+
+# Log the number of parameters
+encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
+decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
+
+logger.info(
+    f"Encoder: {encoder_trainable_params}/{encoder_total_params} trainable/total parameters"
+)
+logger.info(
+    f"Decoder: {decoder_trainable_params}/{decoder_total_params} trainable/total parameters"
+)
+
+wandb.log(
+    {
+        "encoder/trainable_params": encoder_trainable_params,
+        "encoder/total_params": encoder_total_params,
+        "decoder/trainable_params": decoder_trainable_params,
+        "decoder/total_params": decoder_total_params,
+    }
+)
+
 current_step = 0
 
 ENCODER.train()
