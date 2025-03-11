@@ -169,6 +169,3 @@ while True:
 
     if current_step >= CONFIG.training_steps:
         break
-
-    if PROCESSED_TOKENS >= CONFIG.training_steps:
-        break
