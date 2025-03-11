@@ -48,8 +48,10 @@ class LatentEncoder(nn.Module):
                 )
             )
         memory_position_ids = torch.cat(memory_position_ids, dim=0)
-        position_ids = torch.cat([memory_position_ids, position_ids], dim=0).to(
-            input_ids.device
+        position_ids = (
+            torch.cat([memory_position_ids, position_ids], dim=0)
+            .to(input_ids.device)
+            .repeat(B, 1)
         )
         masks = input_ids != pad_token_id
         embeds = torch.cat(
