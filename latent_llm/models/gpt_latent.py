@@ -24,7 +24,7 @@ class LatentEncoder(nn.Module):
         self.base_config = self.model.config
         self.gist_tokens = nn.Parameter(
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
-        ).to(torch.bfloat16, device=self.model.device)
+        ).to(dtype=torch.bfloat16, device=self.model.device)
         self.n_gist_tokens = n_gist_tokens
         self.init_weights()
 
