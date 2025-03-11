@@ -112,7 +112,6 @@ class LatentDecoder(nn.Module):
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
-        assert mem_embeds.size(1) == self.n_gist_tokens
         embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
@@ -122,7 +121,7 @@ class LatentDecoder(nn.Module):
             dim=1,
         )
         logits = self.model(inputs_embeds=embeds).logits
-        logits = logits[:, self.n_gist_tokens :, :]
+        logits = logits[:, mem_embeds.size(1) :, :]
         if labels is not None:
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
