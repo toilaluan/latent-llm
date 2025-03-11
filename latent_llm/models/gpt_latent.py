@@ -16,7 +16,10 @@ if not os.path.exists(CKPT_DIR):
 class LatentEncoder(nn.Module):
     def __init__(self, model_name: str, n_gist_tokens: int):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            attn_implementation="flash_attention_2",
+        )
         self.base_config = self.model.config
         self.gist_tokens = nn.Parameter(
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
@@ -84,7 +87,10 @@ class LatentEncoder(nn.Module):
 class LatentDecoder(nn.Module):
     def __init__(self, model_name: str, n_gist_tokens: int):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            attn_implementation="flash_attention_2",
+        )
         self.base_config = self.model.config
         self.n_gist_tokens = n_gist_tokens
 
