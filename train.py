@@ -175,10 +175,10 @@ def main():
     decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
 
     logger.info(
-        f"Encoder: {encoder_trainable_params}/{encoder_total_params} trainable/total parameters"
+        f"Encoder: {encoder_trainable_params/encoder_total_params:.2%} trainable/total parameters"
     )
     logger.info(
-        f"Decoder: {decoder_trainable_params}/{decoder_total_params} trainable/total parameters"
+        f"Decoder: {decoder_trainable_params/decoder_total_params:.2%} trainable/total parameters"
     )
 
     wandb.log(
