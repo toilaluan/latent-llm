@@ -48,7 +48,7 @@ class TrainingConfig:
     max_new_tokens: int = 512
     training_steps: int = 100000
     wandb_project: str = "latent-llm"
-    limit: int = 1000000
+    limit: int = -1
 
 
 CONFIG = TrainingConfig()
