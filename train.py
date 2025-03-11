@@ -9,6 +9,7 @@ import logging
 from rich.logging import RichHandler
 from accelerate import Accelerator
 import time
+import argparse
 
 accelerator = Accelerator(mixed_precision="bf16")
 
@@ -51,149 +52,215 @@ class TrainingConfig:
     limit: int = -1
 
 
-CONFIG = TrainingConfig()
-TOKEN_PER_BATCH = CONFIG.block_size * CONFIG.batch_size
-wandb.init(project=CONFIG.wandb_project)
-
-print("--- Training Config ---")
-logger.info(CONFIG)
-print("---")
-
-ENCODER = LatentEncoder(CONFIG.model_name, CONFIG.n_gist_tokens)
-DECODER = LatentDecoder(CONFIG.model_name, CONFIG.n_gist_tokens)
-
-TOKENIZER = AutoTokenizer.from_pretrained(CONFIG.model_name)
-TOKENIZER.pad_token = TOKENIZER.eos_token
-
-
-DATASET = TextDataset(
-    dataset_id=CONFIG.dataset_id,
-    split=CONFIG.split,
-    block_size=CONFIG.block_size,
-    model_name=CONFIG.model_name,
-    limit=CONFIG.limit,
-)
-
-
-DATALOADER = DataLoader(
-    DATASET,
-    batch_size=CONFIG.batch_size,
-    shuffle=True,
-)
-
-
-def training_step(batch: torch.Tensor) -> torch.Tensor:
-    input_ids = batch[:, :-1].to(accelerator.device)
-    labels = batch[:, 1:].to(accelerator.device)
-    mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
-    logits, loss = DECODER(
-        input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
+def parse_args():
+    parser = argparse.ArgumentParser(description="Training script for latent LLM.")
+    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM2-135M")
+    parser.add_argument(
+        "--dataset_id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
     )
-    return loss, mem_embeds, input_ids
+    parser.add_argument("--split", type=str, default="train")
+    parser.add_argument("--block_size", type=int, default=256)
+    parser.add_argument("--n_gist_tokens", type=int, default=256)
+    parser.add_argument(
+        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
+    )
+    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--weight_decay", type=float, default=1e-4)
+    parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--max_epochs", type=int, default=10)
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=(
+            "cuda"
+            if torch.cuda.is_available()
+            else "mps" if torch.backends.mps.is_available() else "cpu"
+        ),
+    )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="16-mixed" if torch.cuda.is_available() else "32",
+    )
+    parser.add_argument("--log_interval", type=int, default=10)
+    parser.add_argument("--validating_interval", type=int, default=100)
+    parser.add_argument("--save_interval", type=int, default=1_000)
+    parser.add_argument("--max_new_tokens", type=int, default=512)
+    parser.add_argument("--training_steps", type=int, default=100_000)
+    parser.add_argument("--wandb_project", type=str, default="latent-llm")
+    parser.add_argument("--limit", type=int, default=-1)
+    return parser.parse_args()
 
 
-def count_parameters(model):
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return trainable_params, total_params
+def main():
+    args = parse_args()
+    config = TrainingConfig(
+        model_name=args.model_name,
+        dataset_id=args.dataset_id,
+        split=args.split,
+        block_size=args.block_size,
+        n_gist_tokens=args.n_gist_tokens,
+        hub_repo_id=args.hub_repo_id,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        max_grad_norm=args.max_grad_norm,
+        max_epochs=args.max_epochs,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        device=args.device,
+        precision=args.precision,
+        log_interval=args.log_interval,
+        validating_interval=args.validating_interval,
+        save_interval=args.save_interval,
+        max_new_tokens=args.max_new_tokens,
+        training_steps=args.training_steps,
+        wandb_project=args.wandb_project,
+        limit=args.limit,
+    )
 
+    wandb.init(project=config.wandb_project)
 
-current_step = 0
+    print("--- Training Config ---")
+    logger.info(config)
+    print("---")
 
-ENCODER.train()
-DECODER.train()
+    ENCODER = LatentEncoder(config.model_name, config.n_gist_tokens)
+    DECODER = LatentDecoder(config.model_name, config.n_gist_tokens)
 
-# for param in DECODER.parameters():
-#     param.requires_grad = False
+    TOKENIZER = AutoTokenizer.from_pretrained(config.model_name)
+    TOKENIZER.pad_token = TOKENIZER.eos_token
 
+    DATASET = TextDataset(
+        dataset_id=config.dataset_id,
+        split=config.split,
+        block_size=config.block_size,
+        model_name=config.model_name,
+        limit=config.limit,
+    )
 
-# Log the number of parameters
-encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
-decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
+    DATALOADER = DataLoader(
+        DATASET,
+        batch_size=config.batch_size,
+        shuffle=True,
+    )
 
-logger.info(
-    f"Encoder: {encoder_trainable_params}/{encoder_total_params} trainable/total parameters"
-)
-logger.info(
-    f"Decoder: {decoder_trainable_params}/{decoder_total_params} trainable/total parameters"
-)
-
-wandb.log(
-    {
-        "encoder/trainable_params": encoder_trainable_params,
-        "encoder/total_params": encoder_total_params,
-        "decoder/trainable_params": decoder_trainable_params,
-        "decoder/total_params": decoder_total_params,
-    }
-)
-
-OPTIMIZER = torch.optim.AdamW(
-    list(ENCODER.parameters()),
-    lr=CONFIG.learning_rate,
-    weight_decay=CONFIG.weight_decay,
-)
-
-ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
-    ENCODER, DECODER, DATALOADER, OPTIMIZER
-)
-ENCODER.to(accelerator.device)
-DECODER.to(accelerator.device)
-
-PROCESSED_TOKENS = 0
-START_TIME = time.time()
-
-while True:
-    OPTIMIZER.zero_grad()
-    batch = next(iter(DATALOADER))
-    loss, mem_embeds, input_ids = training_step(batch)
-    wandb.log({"train/loss": loss.item()})
-    accelerator.backward(loss)
-    OPTIMIZER.step()
-    PROCESSED_TOKENS += TOKEN_PER_BATCH
-    TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
-
-    if current_step % CONFIG.log_interval == 0:
-        logger.info(
-            f"[{current_step}/{CONFIG.training_steps}] loss: {loss.item()}; {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+    def training_step(batch: torch.Tensor) -> torch.Tensor:
+        input_ids = batch[:, :-1].to(accelerator.device)
+        labels = batch[:, 1:].to(accelerator.device)
+        mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
+        logits, loss = DECODER(
+            input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
+        return loss, mem_embeds, input_ids
 
-    if current_step % CONFIG.save_interval == 0:
-        logger.info("Saving to hub...")
-        ENCODER.push_to_hub(CONFIG.hub_repo_id)
+    def count_parameters(model):
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        return trainable_params, total_params
 
-    if current_step % CONFIG.validating_interval == 0:
-        logger.info("Generating...")
-        ENCODER.eval()
-        DECODER.eval()
-        with torch.no_grad():
-            batch = next(iter(DATALOADER))
-            generated_ids = DECODER.generate(
-                mem_embeds[:1, :, :],
-                input_ids[:1, :1],  # Seed token
-                max_new_tokens=CONFIG.max_new_tokens,
-            )
-            completion = TOKENIZER.decode(generated_ids[0])
-            label = TOKENIZER.decode(batch[0, :])
-            # Log completion and input_ids
-            wandb.log(
-                {
-                    "train/completion": wandb.Table(
-                        columns=["Type", "Text"],
-                        data=[["Completion", completion], ["Label", label]],
-                    ),
-                }
-            )
+    current_step = 0
+
+    ENCODER.train()
+    DECODER.train()
+
+    # for param in DECODER.parameters():
+    #     param.requires_grad = False
+
+    # Log the number of parameters
+    encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
+    decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
+
+    logger.info(
+        f"Encoder: {encoder_trainable_params}/{encoder_total_params} trainable/total parameters"
+    )
+    logger.info(
+        f"Decoder: {decoder_trainable_params}/{decoder_total_params} trainable/total parameters"
+    )
+
+    wandb.log(
+        {
+            "encoder/trainable_params": encoder_trainable_params,
+            "encoder/total_params": encoder_total_params,
+            "decoder/trainable_params": decoder_trainable_params,
+            "decoder/total_params": decoder_total_params,
+        }
+    )
+
+    OPTIMIZER = torch.optim.AdamW(
+        list(ENCODER.parameters()),
+        lr=config.learning_rate,
+        weight_decay=config.weight_decay,
+    )
+
+    ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
+        ENCODER, DECODER, DATALOADER, OPTIMIZER
+    )
+    ENCODER.to(accelerator.device)
+    DECODER.to(accelerator.device)
+
+    PROCESSED_TOKENS = 0
+    START_TIME = time.time()
+
+    while True:
+        OPTIMIZER.zero_grad()
+        batch = next(iter(DATALOADER))
+        loss, mem_embeds, input_ids = training_step(batch)
+        wandb.log({"train/loss": loss.item()})
+        accelerator.backward(loss)
+        OPTIMIZER.step()
+        PROCESSED_TOKENS += config.block_size * config.batch_size
+        TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
+
+        if current_step % config.log_interval == 0:
             logger.info(
-                f"[{current_step}/{CONFIG.training_steps}] completion: {completion[:32]}..."
+                f"[{current_step}/{config.training_steps}] loss: {loss.item()}; {TOKEN_PER_SECOND} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
-            logger.info(
-                f"[{current_step}/{CONFIG.training_steps}] label: {label[:32]}..."
-            )
-        ENCODER.train()
-        DECODER.train()
-        START_TIME = time.time()
 
-    if current_step >= CONFIG.training_steps:
-        break
+        if current_step % config.save_interval == 0:
+            logger.info("Saving to hub...")
+            ENCODER.push_to_hub(config.hub_repo_id)
 
-    current_step += 1
+        if current_step % config.validating_interval == 0:
+            logger.info("Generating...")
+            ENCODER.eval()
+            DECODER.eval()
+            with torch.no_grad():
+                batch = next(iter(DATALOADER))
+                generated_ids = DECODER.generate(
+                    mem_embeds[:1, :, :],
+                    input_ids[:1, :1],  # Seed token
+                    max_new_tokens=config.max_new_tokens,
+                )
+                completion = TOKENIZER.decode(generated_ids[0])
+                label = TOKENIZER.decode(batch[0, :])
+                # Log completion and input_ids
+                wandb.log(
+                    {
+                        "train/completion": wandb.Table(
+                            columns=["Type", "Text"],
+                            data=[["Completion", completion], ["Label", label]],
+                        ),
+                    }
+                )
+                logger.info(
+                    f"[{current_step}/{config.training_steps}] completion: {completion[:32]}..."
+                )
+                logger.info(
+                    f"[{current_step}/{config.training_steps}] label: {label[:32]}..."
+                )
+            ENCODER.train()
+            DECODER.train()
+            START_TIME = time.time()
+
+        if current_step >= config.training_steps:
+            break
+
+        current_step += 1
+
+
+if __name__ == "__main__":
+    main()
