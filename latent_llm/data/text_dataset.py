@@ -72,7 +72,7 @@ class RandomTextDataset(Dataset):
         return self.mnemo.generate(strength=256)
 
     def __len__(self):
-        return 2**31  # Arbitrary large number to simulate an unlimited dataset
+        return 100_000  # Arbitrary large number to simulate an unlimited dataset
 
     def __getitem__(self, idx):
         text = self._random_text()
