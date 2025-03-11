@@ -132,6 +132,10 @@ while True:
                     ),
                 }
             )
+            logger.info(
+                f"[{current_step}/{CONFIG.training_steps}] completion: {completion}"
+            )
+            logger.info(f"[{current_step}/{CONFIG.training_steps}] label: {label}")
         ENCODER.train()
         DECODER.train()
 
