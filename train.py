@@ -101,9 +101,7 @@ def parse_args():
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--limit", type=int, default=-1)
-    parser.add_argument(
-        "--freeze_decoder", default=False, action="store_true"
-    )
+    parser.add_argument("--freeze_decoder", default=False, action="store_true")
     return parser.parse_args()
 
 
