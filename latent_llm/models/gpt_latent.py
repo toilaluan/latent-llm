@@ -210,6 +210,9 @@ class LatentDecoder(nn.Module):
         # Generate tokens one by one
         for _ in range(max_new_tokens):
             # Forward pass
+            print(embeds.size())
+            print(attention_mask.size())
+            print(position_ids.size())
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
