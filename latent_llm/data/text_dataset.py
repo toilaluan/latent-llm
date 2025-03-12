@@ -68,6 +68,9 @@ class RandomTextDataset(Dataset):
         self.block_size = block_size
         self.mnemo = Mnemonic("english")
 
+    def _random_long_text(self) -> str:
+        return " ".join(self._random_text() for _ in range(random.randint(1, 32)))
+
     def _random_text(self) -> str:
         return self.mnemo.generate(strength=256)
 
@@ -75,7 +78,7 @@ class RandomTextDataset(Dataset):
         return 100_000_000  # Arbitrary large number to simulate an unlimited dataset
 
     def __getitem__(self, idx):
-        text = self._random_text()
+        text = self._random_long_text()
         input_ids = self.tokenizer(
             text,
             return_tensors="pt",
