@@ -57,6 +57,7 @@ class TrainingConfig:
     training_steps: int = 100_000
     wandb_project: str = "latent-llm"
     limit: int = -1
+    freeze_decoder: bool = True
 
 
 def parse_args():
@@ -100,6 +101,9 @@ def parse_args():
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--limit", type=int, default=-1)
+    parser.add_argument(
+        "--freeze_decoder", type=bool, default=False, action="store_true"
+    )
     return parser.parse_args()
 
 
@@ -183,8 +187,9 @@ def main():
     ENCODER.train()
     DECODER.train()
 
-    # for param in DECODER.parameters():
-    #     param.requires_grad = False
+    if config.freeze_decoder:
+        for param in DECODER.parameters():
+            param.requires_grad = False
 
     # Log the number of parameters
     encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
