@@ -206,13 +206,10 @@ class LatentDecoder(nn.Module):
             (B, self.mem_size + input_ids.size(1)), dtype=torch.long, device=device
         )
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-
+        total_tokens = min(max_new_tokens, self.block_size - input_ids.size(1))
         # Generate tokens one by one
-        for _ in range(max_new_tokens):
+        for _ in range(total_tokens):
             # Forward pass
-            print(embeds.size())
-            print(attention_mask.size())
-            print(position_ids.size())
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
