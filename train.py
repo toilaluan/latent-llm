@@ -259,7 +259,7 @@ def main():
                     max_new_tokens=config.max_new_tokens,
                 )
                 completion = TOKENIZER.decode(generated_ids[0])
-                label = TOKENIZER.decode(batch[0, :])
+                label = TOKENIZER.decode(input_ids[0, :])
                 # Log completion and input_ids
                 wandb.log(
                     {
