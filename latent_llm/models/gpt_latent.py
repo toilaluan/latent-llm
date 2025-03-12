@@ -31,6 +31,7 @@ class LatentEncoder(nn.Module):
         )
         self.block_size = block_size
         self.init_weights()
+        self.init_position_ids()
 
     def init_position_ids(self):
         mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)
