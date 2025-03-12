@@ -205,6 +205,7 @@ class LatentDecoder(nn.Module):
         attention_mask = torch.ones(
             (B, self.mem_size + input_ids.size(1)), dtype=torch.long, device=device
         )
+        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
 
         # Generate tokens one by one
         for _ in range(max_new_tokens):
@@ -212,7 +213,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
-                position_ids=self.position_ids[: embeds.size(1)].repeat(B, 1),
+                position_ids=position_ids,
             )
             logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
 
@@ -241,6 +242,7 @@ class LatentDecoder(nn.Module):
                 [attention_mask, torch.ones((B, 1), dtype=torch.long, device=device)],
                 dim=1,
             )
+            position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
 
         return generated_ids
 
