@@ -169,7 +169,7 @@ def main():
     DATALOADER = cycle(DATALOADER)
 
     def training_step(batch: torch.Tensor) -> torch.Tensor:
-        input_ids = batch[:, :-1].to(accelerator.device)
+        input_ids = batch.to(accelerator.device)
         labels = batch.to(accelerator.device)
         mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
         logits, loss, token_accuracy = DECODER(
