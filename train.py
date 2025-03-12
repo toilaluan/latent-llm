@@ -36,6 +36,7 @@ class TrainingConfig:
     dataset_type: str = "text"
     block_size: int = 256
     n_gist_tokens: int = 256
+    n_ae_tokens: int = 1
     hub_repo_id: str = "toilaluan/smol-lm-2-135m-latent-encoder"
     learning_rate: float = 1e-4
     weight_decay: float = 1e-4
@@ -70,6 +71,7 @@ def parse_args():
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--n_gist_tokens", type=int, default=256)
+    parser.add_argument("--n_ae_tokens", type=int, default=1)
     parser.add_argument(
         "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent"
     )
@@ -114,6 +116,7 @@ def main():
         dataset_type=args.dataset_type,
         block_size=args.block_size,
         n_gist_tokens=args.n_gist_tokens,
+        n_ae_tokens=args.n_ae_tokens,
         hub_repo_id=args.hub_repo_id,
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
@@ -139,8 +142,12 @@ def main():
     logger.info(config)
     print("---")
 
-    ENCODER = LatentEncoder(config.model_name, config.n_gist_tokens)
-    DECODER = LatentDecoder(config.model_name, config.n_gist_tokens)
+    ENCODER = LatentEncoder(
+        config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
+    )
+    DECODER = LatentDecoder(
+        config.model_name, config.n_gist_tokens + config.n_ae_tokens, config.block_size
+    )
 
     TOKENIZER = AutoTokenizer.from_pretrained(config.model_name)
     TOKENIZER.pad_token = TOKENIZER.eos_token

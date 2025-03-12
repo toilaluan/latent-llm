@@ -14,7 +14,9 @@ if not os.path.exists(CKPT_DIR):
 
 
 class LatentEncoder(nn.Module):
-    def __init__(self, model_name: str, n_gist_tokens: int):
+    def __init__(
+        self, model_name: str, n_gist_tokens: int, n_ae_tokens: int, block_size: int
+    ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
@@ -24,8 +26,23 @@ class LatentEncoder(nn.Module):
             torch.randn(n_gist_tokens, self.base_config.hidden_size)
         )
         self.n_gist_tokens = n_gist_tokens
-        self.ae_token = nn.Parameter(torch.randn(1, self.base_config.hidden_size))
+        self.ae_tokens = nn.Parameter(
+            torch.randn(n_ae_tokens, self.base_config.hidden_size)
+        )
+        self.block_size = block_size
         self.init_weights()
+
+    def init_position_ids(self):
+        mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)
+        memory_position_ids = torch.arange(self.n_gist_tokens) * mem_pos_step
+        position_ids = torch.cat(
+            [
+                torch.arange(self.block_size),
+                memory_position_ids,
+            ],
+            dim=0,
+        )
+        self.register_buffer("position_ids", position_ids)
 
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens)
@@ -38,17 +55,7 @@ class LatentEncoder(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         embeds = self.model.get_input_embeddings()(input_ids)
-        position_ids = torch.arange(input_ids.size(1), device=input_ids.device)
-        memory_position_ids = []
-        step = max(1, input_ids.size(1) // self.n_gist_tokens)
-        for i in range(self.n_gist_tokens):
-            memory_position_ids.append(i * step)
-        memory_position_ids = torch.tensor(memory_position_ids, device=input_ids.device)
-        position_ids = (
-            torch.cat([position_ids, memory_position_ids], dim=0)
-            .to(input_ids.device)
-            .repeat(B, 1)
-        )
+        position_ids = self.position_ids.repeat(B, 1)
         masks = input_ids != pad_token_id
         embeds = torch.cat(
             [
@@ -67,7 +74,7 @@ class LatentEncoder(nn.Module):
             position_ids=position_ids,
         ).hidden_states[-1]
         gisted_embeds = last_hidden_states[:, -self.n_gist_tokens :, :]
-        ae_embeds = self.ae_token.repeat(B, 1, 1)
+        ae_embeds = self.ae_tokens.repeat(B, 1, 1)
         return torch.cat([gisted_embeds, ae_embeds], dim=1)
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
@@ -78,7 +85,7 @@ class LatentEncoder(nn.Module):
         self.gist_tokens.data.cpu().numpy().tofile(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy"
         )
-        self.ae_token.data.cpu().numpy().tofile(f"{ckpt_dir}/{repo_id}/ae_token.npy")
+        self.ae_tokens.data.cpu().numpy().tofile(f"{ckpt_dir}/{repo_id}/ae_tokens.npy")
         hf_api = HfApi()
         np.save(
             f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
@@ -90,8 +97,8 @@ class LatentEncoder(nn.Module):
         )
         hf_api.upload_file(
             repo_id=repo_id,
-            path_or_fileobj=f"{ckpt_dir}/{repo_id}/ae_token.npy",
-            path_in_repo="ae_token.npy",
+            path_or_fileobj=f"{ckpt_dir}/{repo_id}/ae_tokens.npy",
+            path_in_repo="ae_tokens.npy",
         )
 
     def load_pretrained(self, repo_id: str):
@@ -102,19 +109,35 @@ class LatentEncoder(nn.Module):
             path_in_repo="gist_tokens.npy",
         )
         self.gist_tokens.data = torch.from_numpy(np.load(gist_tokens))
-        ae_token = hf_api.download_file(
+        ae_tokens = hf_api.download_file(
             repo_id=repo_id,
-            path_in_repo="ae_token.npy",
+            path_in_repo="ae_tokens.npy",
         )
-        self.ae_token.data = torch.from_numpy(np.load(ae_token))
+        self.ae_tokens.data = torch.from_numpy(np.load(ae_tokens))
 
 
 class LatentDecoder(nn.Module):
-    def __init__(self, model_name: str, n_gist_tokens: int):
+    def __init__(
+        self, model_name: str, n_gist_tokens: int, n_ae_tokens: int, block_size: int
+    ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(model_name)
         self.base_config = self.model.config
-        self.n_gist_tokens = n_gist_tokens
+        self.mem_size = n_gist_tokens + n_ae_tokens
+        self.block_size = block_size
+        self.init_position_ids()
+
+    def init_position_ids(self):
+        mem_pos_step = max(self.block_size // self.mem_size, 1)
+        memory_position_ids = torch.arange(self.mem_size) * mem_pos_step
+        position_ids = torch.cat(
+            [
+                memory_position_ids,
+                torch.arange(self.block_size),
+            ],
+            dim=0,
+        )
+        self.register_buffer("position_ids", position_ids)
 
     def forward(
         self,
@@ -132,7 +155,11 @@ class LatentDecoder(nn.Module):
             ],
             dim=1,
         )
-        logits = self.model(inputs_embeds=embeds).logits
+        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
+        logits = self.model(
+            inputs_embeds=embeds,
+            position_ids=position_ids,
+        ).logits
         # labels = [a b c d], mem_embeds = [m m m m]
         # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
         # label map: [x a b c] -> [a b c d]
@@ -184,6 +211,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
+                position_ids=self.position_ids[: embeds.size(1)].repeat(B, 1),
             )
             logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
 
