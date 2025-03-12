@@ -203,7 +203,7 @@ class LatentDecoder(nn.Module):
 
         # Create attention mask (1 for all tokens)
         attention_mask = torch.ones(
-            (B, self.n_gist_tokens + input_ids.size(1)), dtype=torch.long, device=device
+            (B, self.mem_size + input_ids.size(1)), dtype=torch.long, device=device
         )
 
         # Generate tokens one by one
@@ -251,9 +251,10 @@ class LatentDecoder(nn.Module):
 if __name__ == "__main__":
     model_name = "HuggingFaceTB/SmolLM2-135M"
     n_gist_tokens = 64
+    n_ae_tokens = 1
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    latent_encoder = LatentEncoder(model_name, n_gist_tokens)
-    latent_decoder = LatentDecoder(model_name, n_gist_tokens)
+    latent_encoder = LatentEncoder(model_name, n_gist_tokens, n_ae_tokens)
+    latent_decoder = LatentDecoder(model_name, n_gist_tokens, n_ae_tokens)
 
     input_ids = torch.randint(0, 100, (1, 10))
     mem_embeds = latent_encoder(input_ids)
