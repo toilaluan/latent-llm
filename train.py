@@ -146,7 +146,7 @@ def main():
         config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
     )
     DECODER = LatentDecoder(
-        config.model_name, config.n_gist_tokens + config.n_ae_tokens, config.block_size
+        config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
     )
 
     TOKENIZER = AutoTokenizer.from_pretrained(config.model_name)
