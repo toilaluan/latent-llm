@@ -83,14 +83,13 @@ class LatentEncoder(nn.Module):
         folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
         if not os.path.exists(folder):
             os.makedirs(folder)
-        self.gist_tokens.data.cpu().numpy().tofile(
-            f"{ckpt_dir}/{repo_id}/gist_tokens.npy"
-        )
-        self.ae_tokens.data.cpu().numpy().tofile(f"{ckpt_dir}/{repo_id}/ae_tokens.npy")
+        
+        # Save arrays properly
+        np.save(f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy())
+        np.save(f"{ckpt_dir}/{repo_id}/ae_tokens.npy", self.ae_tokens.data.cpu().numpy())
+        
+        # Remove redundant tofile calls that are causing issues
         hf_api = HfApi()
-        np.save(
-            f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
-        )
         hf_api.upload_file(
             repo_id=repo_id,
             path_or_fileobj=f"{ckpt_dir}/{repo_id}/gist_tokens.npy",
@@ -105,16 +104,18 @@ class LatentEncoder(nn.Module):
     def load_pretrained(self, repo_id: str):
         self.model = AutoModelForCausalLM.from_pretrained(repo_id)
         hf_api = HfApi()
-        gist_tokens = hf_api.hf_hub_download(
+        gist_tokens_path = hf_api.hf_hub_download(
             repo_id=repo_id,
             filename="gist_tokens.npy",
         )
-        self.gist_tokens.data = torch.from_numpy(np.load(gist_tokens))
-        ae_tokens = hf_api.hf_hub_download(
+        ae_tokens_path = hf_api.hf_hub_download(
             repo_id=repo_id,
             filename="ae_tokens.npy",
         )
-        self.ae_tokens.data = torch.from_numpy(np.load(ae_tokens))
+        
+        # Load arrays with allow_pickle=True
+        self.gist_tokens.data = torch.from_numpy(np.load(gist_tokens_path, allow_pickle=True))
+        self.ae_tokens.data = torch.from_numpy(np.load(ae_tokens_path, allow_pickle=True))
 
 
 class LatentDecoder(nn.Module):
