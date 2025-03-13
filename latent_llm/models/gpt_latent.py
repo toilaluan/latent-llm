@@ -166,7 +166,12 @@ class LatentEncoder(nn.Module):
         )
 
     @classmethod
-    def from_pretrained(cls, repo_id: str, torch_dtype: torch.dtype = torch.bfloat16):
+    def from_pretrained(
+        cls,
+        repo_id: str,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: str = "cuda",
+    ):
         """Create a LatentEncoder instance from a pretrained model on the Hub."""
         # Download config
         try:
@@ -196,6 +201,7 @@ class LatentEncoder(nn.Module):
 
         # Load weights
         instance.load_pretrained(repo_id)
+        instance.to(device)
         return instance
 
     def load_pretrained(self, repo_id: str):
@@ -360,6 +366,7 @@ class GPTLatentVAEPipeline:
         pretrained_encoder_id: Optional[str] = None,
         pretrained_decoder_id: Optional[str] = None,
         torch_dtype: torch.dtype = torch.bfloat16,
+        device: str = "cuda",
     ):
         """
         Initialize the GPTLatentPipeline with pretrained encoder and/or decoder.
@@ -387,7 +394,9 @@ class GPTLatentVAEPipeline:
         """Load the encoder model if not already loaded."""
         if self.encoder is None and self.pretrained_encoder_id:
             self.encoder = LatentEncoder.from_pretrained(
-                self.pretrained_encoder_id, torch_dtype=self.torch_dtype
+                self.pretrained_encoder_id,
+                torch_dtype=self.torch_dtype,
+                device=self.device,
             )
             self.encoder.eval()
 
@@ -416,6 +425,7 @@ class GPTLatentVAEPipeline:
                 torch_dtype=self.torch_dtype,
             )
             self.decoder.eval()
+            self.decoder.to(device)
 
     def encode(self, text: str) -> torch.Tensor:
         """
