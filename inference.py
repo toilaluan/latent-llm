@@ -133,6 +133,8 @@ def main():
         empty_input_ids = torch.zeros(
             (input_ids.size(0), 1), dtype=torch.long, device=device
         )
+        logger.info(f"Empty input IDs: {empty_input_ids}")
+        logger.info(f"Latent embeds: {latent_embeds.shape}")
 
         generated_ids = decoder.generate(
             mem_embeds=latent_embeds,
