@@ -36,6 +36,7 @@ class LatentEncoder(nn.Module):
             model_name,
             torch_dtype=torch_dtype,
         )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.base_config = self.model.config
 
         # Apply LoRA if specified
