@@ -7,6 +7,7 @@ import os
 from huggingface_hub import HfApi
 import numpy as np
 from huggingface_hub import snapshot_download
+from safetensors.torch import save_file, load_file
 
 
 CKPT_DIR = ".training_cache/checkpoints"
@@ -86,44 +87,51 @@ class LatentEncoder(nn.Module):
         if not os.path.exists(folder):
             os.makedirs(folder)
 
-        # Save arrays properly
-        np.save(
-            f"{ckpt_dir}/{repo_id}/gist_tokens.npy", self.gist_tokens.data.cpu().numpy()
-        )
-        np.save(
-            f"{ckpt_dir}/{repo_id}/ae_tokens.npy", self.ae_tokens.data.cpu().numpy()
-        )
+        # Save tensors using safetensors
+        tensors = {
+            "gist_tokens": self.gist_tokens.data,
+            "ae_tokens": self.ae_tokens.data,
+        }
+        save_path = f"{ckpt_dir}/{repo_id}/latent_tokens.safetensors"
+        save_file(tensors, save_path)
 
-        # Remove redundant tofile calls that are causing issues
+        # Upload to hub
         hf_api = HfApi()
         hf_api.upload_file(
             repo_id=repo_id,
-            path_or_fileobj=f"{ckpt_dir}/{repo_id}/gist_tokens.npy",
-            path_in_repo="gist_tokens.npy",
-        )
-        hf_api.upload_file(
-            repo_id=repo_id,
-            path_or_fileobj=f"{ckpt_dir}/{repo_id}/ae_tokens.npy",
-            path_in_repo="ae_tokens.npy",
+            path_or_fileobj=save_path,
+            path_in_repo="latent_tokens.safetensors",
         )
 
     def load_pretrained(self, repo_id: str):
         self.model = AutoModelForCausalLM.from_pretrained(repo_id)
-        hf_api = HfApi()
-        gist_tokens_path = hf_api.hf_hub_download(
-            repo_id=repo_id, filename="gist_tokens.npy", local_dir=CKPT_DIR
-        )
-        ae_tokens_path = hf_api.hf_hub_download(
-            repo_id=repo_id, filename="ae_tokens.npy", local_dir=CKPT_DIR
-        )
 
-        # Load arrays with allow_pickle=True
-        self.gist_tokens.data = torch.from_numpy(
-            np.load(gist_tokens_path, allow_pickle=True)
+        # Download safetensors file
+        tokens_path = snapshot_download(
+            repo_id=repo_id, allow_patterns=["latent_tokens.safetensors"]
         )
-        self.ae_tokens.data = torch.from_numpy(
-            np.load(ae_tokens_path, allow_pickle=True)
-        )
+        tokens_path = os.path.join(tokens_path, "latent_tokens.safetensors")
+
+        # Load tensors using safetensors
+        if os.path.exists(tokens_path):
+            tensors = load_file(tokens_path)
+            self.gist_tokens.data = tensors["gist_tokens"]
+            self.ae_tokens.data = tensors["ae_tokens"]
+        else:
+            # Fallback to old method for backward compatibility
+            hf_api = HfApi()
+            gist_tokens_path = hf_api.hf_hub_download(
+                repo_id=repo_id, filename="gist_tokens.npy", local_dir=CKPT_DIR
+            )
+            ae_tokens_path = hf_api.hf_hub_download(
+                repo_id=repo_id, filename="ae_tokens.npy", local_dir=CKPT_DIR
+            )
+            self.gist_tokens.data = torch.from_numpy(
+                np.load(gist_tokens_path, allow_pickle=True)
+            )
+            self.ae_tokens.data = torch.from_numpy(
+                np.load(ae_tokens_path, allow_pickle=True)
+            )
 
 
 class LatentDecoder(nn.Module):
