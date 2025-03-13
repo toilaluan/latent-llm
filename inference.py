@@ -130,15 +130,11 @@ def main():
         # Decode from latent representation
         logger.info("Generating text from latent representation...")
         # Create empty input_ids (don't use first token as seed)
-        empty_input_ids = torch.zeros(
-            (input_ids.size(0), 1), dtype=torch.long, device=device
-        )
-        logger.info(f"Empty input IDs: {empty_input_ids}")
         logger.info(f"Latent embeds: {latent_embeds.shape}")
 
         generated_ids = decoder.generate(
             mem_embeds=latent_embeds,
-            input_ids=empty_input_ids,  # Use empty input instead of first token
+            input_ids=None,  # Use empty input instead of first token
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
         )

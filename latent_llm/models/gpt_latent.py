@@ -311,13 +311,13 @@ class LatentDecoder(nn.Module):
         device = input_ids.device
 
         # Fix for empty input_ids: ensure generated_ids is properly initialized
-        if input_ids.size(1) == 0:
+        if input_ids is None:
             generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
         else:
             generated_ids = input_ids.clone()
 
         mem_embeds = mem_embeds.to(dtype=self.model.dtype)
-        if input_ids.size(1) > 0:
+        if input_ids is not None:
             # Initial input_embeds with memory embeddings
             embeds = self.model.get_input_embeddings()(input_ids)
             # Ensure mem_embeds has the same dtype as embeds
@@ -327,10 +327,12 @@ class LatentDecoder(nn.Module):
 
         # Create attention mask (1 for all tokens)
         attention_mask = torch.ones(
-            (B, self.mem_size + input_ids.size(1)), dtype=torch.long, device=device
+            (B, embeds.size(1)), dtype=torch.long, device=device
         )
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        total_tokens = min(max_new_tokens, self.block_size - input_ids.size(1))
+        total_tokens = min(
+            max_new_tokens, self.block_size - embeds.size(1) + mem_embeds.size(1)
+        )
         # Generate tokens one by one
         for _ in range(total_tokens):
             # Forward pass
