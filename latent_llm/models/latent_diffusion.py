@@ -307,7 +307,7 @@ def train_latent_diffusion(
             truncation=True,
             return_tensors="pt",
         )
-        input_ids = encoded.input_ids
+        input_ids = encoded.input_ids.to("cuda")
 
         # Encode to latent space
         with torch.no_grad():
