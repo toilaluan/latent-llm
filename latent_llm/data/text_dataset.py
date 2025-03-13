@@ -44,7 +44,7 @@ class TextDataset(Dataset):
             max_length=self.block_size,
         ).input_ids
         n_tokens = random.randint(1, self.block_size)
-        input_ids[0, :n_tokens] = self.tokenizer.pad_token_id
+        input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
 
@@ -74,7 +74,7 @@ class RandomTextDataset(Dataset):
             max_length=self.block_size,
         ).input_ids
         n_tokens = random.randint(1, self.block_size)
-        input_ids[0, :n_tokens] = self.tokenizer.pad_token_id
+        input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
 
