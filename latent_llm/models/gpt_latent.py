@@ -105,14 +105,14 @@ class LatentEncoder(nn.Module):
     def load_pretrained(self, repo_id: str):
         self.model = AutoModelForCausalLM.from_pretrained(repo_id)
         hf_api = HfApi()
-        gist_tokens = hf_api.download_file(
+        gist_tokens = hf_api.hf_hub_download(
             repo_id=repo_id,
-            path_in_repo="gist_tokens.npy",
+            filename="gist_tokens.npy",
         )
         self.gist_tokens.data = torch.from_numpy(np.load(gist_tokens))
-        ae_tokens = hf_api.download_file(
+        ae_tokens = hf_api.hf_hub_download(
             repo_id=repo_id,
-            path_in_repo="ae_tokens.npy",
+            filename="ae_tokens.npy",
         )
         self.ae_tokens.data = torch.from_numpy(np.load(ae_tokens))
 
