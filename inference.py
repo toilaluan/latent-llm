@@ -32,13 +32,6 @@ def parse_args():
         help="Base model ID",
     )
     parser.add_argument(
-        "--n_gist_tokens", type=int, default=256, help="Number of gist tokens"
-    )
-    parser.add_argument(
-        "--n_ae_tokens", type=int, default=1, help="Number of autoencoder tokens"
-    )
-    parser.add_argument("--block_size", type=int, default=256, help="Block size")
-    parser.add_argument(
         "--max_new_tokens",
         type=int,
         default=512,

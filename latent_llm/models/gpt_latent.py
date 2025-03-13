@@ -432,7 +432,13 @@ class GPTLatentVAEPipeline:
         self._load_encoder()
 
         # Tokenize input
-        inputs = self.tokenizer(text, return_tensors="pt", padding=True)
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=self.encoder.block_size,
+            truncation=True,
+        )
         input_ids = inputs.input_ids.to(self.encoder.model.device)
 
         # Generate memory embeddings
