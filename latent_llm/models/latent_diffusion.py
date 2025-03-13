@@ -295,7 +295,7 @@ def train_latent_diffusion(
     from torch.utils.data import DataLoader
 
     # Load dataset
-    raw_dataset = datasets.load_from_disk(dataset_path)
+    raw_dataset = datasets.load_dataset(dataset_path)
 
     # Define preprocessing function to encode text to latents
     def encode_text_to_latent(examples):
