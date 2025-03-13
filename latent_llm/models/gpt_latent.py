@@ -212,7 +212,9 @@ class LatentEncoder(nn.Module):
 
         # Download safetensors file
         tokens_path = snapshot_download(
-            repo_id=repo_id, allow_patterns=["latent_tokens.safetensors"]
+            repo_id=repo_id,
+            allow_patterns=["latent_tokens.safetensors"],
+            force_download=True,
         )
         tokens_path = os.path.join(tokens_path, "latent_tokens.safetensors")
         print(f"Loading latent tokens from {tokens_path}")
