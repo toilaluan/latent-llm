@@ -353,6 +353,135 @@ class LatentDecoder(nn.Module):
         self.model.push_to_hub(repo_id)
 
 
+class GPTLatentVAEPipeline:
+    def __init__(
+        self,
+        pretrained_encoder_id: Optional[str] = None,
+        pretrained_decoder_id: Optional[str] = None,
+        torch_dtype: torch.dtype = torch.bfloat16,
+    ):
+        """
+        Initialize the GPTLatentPipeline with pretrained encoder and/or decoder.
+
+        Args:
+            pretrained_encoder_id: HuggingFace repo ID for the encoder
+            pretrained_decoder_id: HuggingFace repo ID for the decoder
+            torch_dtype: Torch dtype for the models
+        """
+        self.pretrained_encoder_id = pretrained_encoder_id
+        self.pretrained_decoder_id = pretrained_decoder_id
+        self.torch_dtype = torch_dtype
+
+        self.encoder = None
+        self.decoder = None
+        self.tokenizer = None
+
+        # Load tokenizer from encoder or decoder model
+        if pretrained_encoder_id:
+            self.tokenizer = AutoTokenizer.from_pretrained(pretrained_encoder_id)
+        elif pretrained_decoder_id:
+            self.tokenizer = AutoTokenizer.from_pretrained(pretrained_decoder_id)
+
+    def _load_encoder(self):
+        """Load the encoder model if not already loaded."""
+        if self.encoder is None and self.pretrained_encoder_id:
+            self.encoder = LatentEncoder.from_pretrained(
+                self.pretrained_encoder_id, torch_dtype=self.torch_dtype
+            )
+            self.encoder.eval()
+
+    def _load_decoder(self):
+        """Load the decoder model if not already loaded."""
+        if self.decoder is None and self.pretrained_decoder_id:
+            # Get model name from repo ID (assuming format is consistent with LatentEncoder.from_pretrained)
+            model_name = self.pretrained_decoder_id
+
+            # Download config to get parameters
+            config_path = snapshot_download(
+                repo_id=self.pretrained_encoder_id,
+                allow_patterns=["latent_config.json"],
+            )
+            config_path = os.path.join(config_path, "latent_config.json")
+            import json
+
+            with open(config_path, "r") as f:
+                config = json.load(f)
+
+            self.decoder = LatentDecoder(
+                model_name=model_name,
+                n_gist_tokens=config["n_gist_tokens"],
+                n_ae_tokens=config["n_ae_tokens"],
+                block_size=config["block_size"],
+                torch_dtype=self.torch_dtype,
+            )
+            self.decoder.eval()
+
+    def encode(self, text: str) -> torch.Tensor:
+        """
+        Encode text to latent embeddings.
+
+        Args:
+            text: Input text to encode
+
+        Returns:
+            Memory embeddings tensor
+        """
+        if not self.pretrained_encoder_id:
+            raise ValueError("Encoder model ID not provided during initialization")
+
+        self._load_encoder()
+
+        # Tokenize input
+        inputs = self.tokenizer(text, return_tensors="pt", padding=True)
+        input_ids = inputs.input_ids.to(self.encoder.model.device)
+
+        # Generate memory embeddings
+        with torch.no_grad():
+            mem_embeds = self.encoder(input_ids, self.tokenizer.pad_token_id)
+
+        return mem_embeds
+
+    def decode(
+        self,
+        mem_embeds: torch.Tensor,
+        max_new_tokens: int = 100,
+        temperature: float = 0.7,
+        **kwargs,
+    ) -> str:
+        """
+        Decode latent embeddings to text.
+
+        Args:
+            mem_embeds: Memory embeddings from encoder
+            max_new_tokens: Maximum number of tokens to generate
+            temperature: Temperature for sampling
+
+        Returns:
+            Generated text
+        """
+        if not self.pretrained_decoder_id:
+            raise ValueError("Decoder model ID not provided during initialization")
+
+        self._load_decoder()
+
+        # Move embeddings to the same device as the decoder
+        mem_embeds = mem_embeds.to(self.decoder.model.device)
+
+        # Generate tokens
+        with torch.no_grad():
+            output_ids = self.decoder.generate(
+                mem_embeds,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                **kwargs,
+            )
+
+        # Decode output tokens to text
+        output_text = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        return output_text
+
+
 if __name__ == "__main__":
     model_name = "HuggingFaceTB/SmolLM2-135M"
     n_gist_tokens = 64

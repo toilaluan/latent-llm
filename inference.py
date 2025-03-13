@@ -1,11 +1,8 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
-from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
+from latent_llm.models.gpt_latent import GPTLatentVAEPipeline
 import argparse
 import logging
 from rich.logging import RichHandler
-import numpy as np
-from huggingface_hub import HfApi
 
 # Configure logging
 logging.basicConfig(
@@ -69,34 +66,15 @@ def main():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     logger.info(f"Using device: {device}")
 
-    # Load tokenizer
-    logger.info(f"Loading tokenizer from {args.encoder_model_id}")
-    tokenizer = AutoTokenizer.from_pretrained(args.encoder_model_id)
-    logger.info(f"pad_token: {tokenizer.pad_token}")
-
-    # Load encoder and decoder
-    logger.info(f"Loading encoder from {args.encoder_model_id}")
-    try:
-        # Try loading using the from_pretrained class method
-        encoder = LatentEncoder.from_pretrained(args.encoder_model_id)
-        encoder.to(device)
-    except Exception as e:
-        logger.error(f"Error loading encoder with from_pretrained: {e}")
-        # Fall back to manual initialization and loading
-        encoder = LatentEncoder(
-            args.base_model_id, args.n_gist_tokens, args.n_ae_tokens, args.block_size
-        )
-
-    encoder.eval()
-
-    logger.info(f"Loading decoder from {args.decoder_model_id}")
-    # For decoder, we don't have a load_pretrained method, so we load the base model directly
-    decoder = LatentDecoder(
-        args.base_model_id, args.n_gist_tokens, args.n_ae_tokens, args.block_size
+    # Initialize the pipeline
+    logger.info(
+        f"Initializing pipeline with encoder: {args.encoder_model_id}, decoder: {args.decoder_model_id}"
     )
-    # The decoder just needs to load the model, no special tokens to load
-    decoder.to(device)
-    decoder.eval()
+    pipeline = GPTLatentVAEPipeline(
+        pretrained_encoder_id=args.encoder_model_id,
+        pretrained_decoder_id=args.decoder_model_id,
+        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+    )
 
     # Prepare input text
     if args.input_text:
@@ -107,34 +85,17 @@ def main():
         input_text = "This is a sample text to demonstrate the latent LLM encoding and decoding process."
         logger.info(f"Using default input text: {input_text}")
 
-    # Tokenize input
-    input_tokens = tokenizer(
-        input_text,
-        truncation=True,
-        max_length=args.block_size,
-        padding="max_length",
-        return_tensors="pt",
-    )
-    input_ids = input_tokens.input_ids.to(device)
-
+    # Encode input text to latent representation
     logger.info("Encoding input text to latent representation...")
-    with torch.no_grad():
-        # Encode the input text to latent representation
-        latent_embeds = encoder(input_ids, pad_token_id=tokenizer.pad_token_id)
+    latent_embeds = pipeline.encode(input_text)
 
-        # Decode from latent representation
-        logger.info("Generating text from latent representation...")
-        # Create empty input_ids (don't use first token as seed)
-        logger.info(f"Latent embeds: {latent_embeds.shape}")
-
-        generated_ids = decoder.generate(
-            embeds=latent_embeds,
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-        )
-
-    # Decode the generated tokens
-    generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+    # Decode from latent representation
+    logger.info("Generating text from latent representation...")
+    generated_text = pipeline.decode(
+        latent_embeds,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+    )
 
     logger.info("\n--- Results ---")
     logger.info(f"Input text: {input_text}")
