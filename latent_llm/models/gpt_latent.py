@@ -198,6 +198,7 @@ class LatentEncoder(nn.Module):
         return instance
 
     def load_pretrained(self, repo_id: str):
+        print(f"Loading pretrained model from {repo_id}")
         # Check if repo has PEFT adapter
         try:
             self.model = AutoModelForCausalLM.from_pretrained(repo_id)
@@ -214,12 +215,13 @@ class LatentEncoder(nn.Module):
             repo_id=repo_id, allow_patterns=["latent_tokens.safetensors"]
         )
         tokens_path = os.path.join(tokens_path, "latent_tokens.safetensors")
-
+        print(f"Loading latent tokens from {tokens_path}")
         # Load tensors using safetensors
         if os.path.exists(tokens_path):
             tensors = load_file(tokens_path)
             self.gist_tokens.data = tensors["gist_tokens"]
             self.ae_tokens.data = tensors["ae_tokens"]
+            print(f"Loaded latent tokens from {tokens_path}")
         else:
             raise ValueError(f"Could not find latent_tokens.safetensors in {repo_id}")
 
