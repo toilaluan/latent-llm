@@ -11,6 +11,7 @@ dependencies = [
     "mnemonic>=0.21",
     "nltk>=3.9.1",
     "numpy>=2.2.3",
+    "peft>=0.14.0",
     "rich>=13.9.4",
     "tiktoken>=0.9.0",
     "torch>=2.6.0",

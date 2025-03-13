@@ -8,6 +8,7 @@ from huggingface_hub import HfApi
 import numpy as np
 from huggingface_hub import snapshot_download
 from safetensors.torch import save_file, load_file
+from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 
 
 CKPT_DIR = ".training_cache/checkpoints"
@@ -24,6 +25,11 @@ class LatentEncoder(nn.Module):
         n_ae_tokens: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
+        use_lora: bool = False,
+        lora_r: int = 8,
+        lora_alpha: int = 16,
+        lora_dropout: float = 0.05,
+        lora_target_modules: Optional[list] = None,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -32,6 +38,25 @@ class LatentEncoder(nn.Module):
             torch_dtype=torch_dtype,
         )
         self.base_config = self.model.config
+
+        # Apply LoRA if specified
+        self.use_lora = use_lora
+        if use_lora:
+            if lora_target_modules is None:
+                # Default target modules for transformer models
+                lora_target_modules = ["q_proj", "v_proj"]
+
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                inference_mode=False,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=lora_target_modules,
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            self.model.print_trainable_parameters()
+
         self.gist_tokens = nn.Parameter(
             torch.randn(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
@@ -59,7 +84,12 @@ class LatentEncoder(nn.Module):
         torch.nn.init.kaiming_normal_(self.gist_tokens)
 
     def get_trainable_parameters(self):
-        return [self.gist_tokens, self.ae_token, *self.model.parameters()]
+        if self.use_lora:
+            return [self.gist_tokens, self.ae_tokens] + [
+                p for p in self.model.parameters() if p.requires_grad
+            ]
+        else:
+            return [self.gist_tokens, self.ae_tokens, *self.model.parameters()]
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
@@ -89,7 +119,13 @@ class LatentEncoder(nn.Module):
         return torch.cat([gisted_embeds, ae_embeds], dim=1)
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
-        self.model.push_to_hub(repo_id)
+        if self.use_lora:
+            self.model.save_pretrained(f"{ckpt_dir}/{repo_id}")
+            # Upload the PEFT adapter to Hub
+            self.model.push_to_hub(repo_id)
+        else:
+            self.model.push_to_hub(repo_id)
+
         folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
         if not os.path.exists(folder):
             os.makedirs(folder)
@@ -102,6 +138,19 @@ class LatentEncoder(nn.Module):
         save_path = f"{ckpt_dir}/{repo_id}/latent_tokens.safetensors"
         save_file(tensors, save_path)
 
+        # Save configuration parameters
+        config = {
+            "n_gist_tokens": self.n_gist_tokens,
+            "n_ae_tokens": self.ae_tokens.size(0),
+            "block_size": self.block_size,
+            "use_lora": self.use_lora,
+        }
+        import json
+
+        config_path = f"{ckpt_dir}/{repo_id}/latent_config.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+
         # Upload to hub
         hf_api = HfApi()
         hf_api.upload_file(
@@ -109,9 +158,57 @@ class LatentEncoder(nn.Module):
             path_or_fileobj=save_path,
             path_in_repo="latent_tokens.safetensors",
         )
+        # Upload config
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=config_path,
+            path_in_repo="latent_config.json",
+        )
+
+    @classmethod
+    def from_pretrained(cls, repo_id: str, torch_dtype: torch.dtype = torch.bfloat16):
+        """Create a LatentEncoder instance from a pretrained model on the Hub."""
+        # Download config
+        try:
+            config_path = snapshot_download(
+                repo_id=repo_id, allow_patterns=["latent_config.json"]
+            )
+            config_path = os.path.join(config_path, "latent_config.json")
+            import json
+
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Could not find latent_config.json in {repo_id}") from e
+
+        # Get model name from repo
+        model_name = repo_id
+
+        # Create instance with loaded config
+        instance = cls(
+            model_name=model_name,
+            n_gist_tokens=config["n_gist_tokens"],
+            n_ae_tokens=config["n_ae_tokens"],
+            block_size=config["block_size"],
+            torch_dtype=torch_dtype,
+            use_lora=config.get("use_lora", False),  # Default to False if not specified
+        )
+
+        # Load weights
+        instance.load_pretrained(repo_id)
+        return instance
 
     def load_pretrained(self, repo_id: str):
-        self.model = AutoModelForCausalLM.from_pretrained(repo_id)
+        # Check if repo has PEFT adapter
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(repo_id)
+            # Try to load as PEFT model
+            self.model = PeftModel.from_pretrained(self.model, repo_id)
+            self.use_lora = True
+        except Exception as e:
+            # If it fails, load as regular model
+            self.model = AutoModelForCausalLM.from_pretrained(repo_id)
+            self.use_lora = False
 
         # Download safetensors file
         tokens_path = snapshot_download(
@@ -125,20 +222,7 @@ class LatentEncoder(nn.Module):
             self.gist_tokens.data = tensors["gist_tokens"]
             self.ae_tokens.data = tensors["ae_tokens"]
         else:
-            # Fallback to old method for backward compatibility
-            hf_api = HfApi()
-            gist_tokens_path = hf_api.hf_hub_download(
-                repo_id=repo_id, filename="gist_tokens.npy", local_dir=CKPT_DIR
-            )
-            ae_tokens_path = hf_api.hf_hub_download(
-                repo_id=repo_id, filename="ae_tokens.npy", local_dir=CKPT_DIR
-            )
-            self.gist_tokens.data = torch.from_numpy(
-                np.load(gist_tokens_path, allow_pickle=True)
-            )
-            self.ae_tokens.data = torch.from_numpy(
-                np.load(ae_tokens_path, allow_pickle=True)
-            )
+            raise ValueError(f"Could not find latent_tokens.safetensors in {repo_id}")
 
 
 class LatentDecoder(nn.Module):

@@ -59,6 +59,12 @@ class TrainingConfig:
     wandb_project: str = "latent-llm"
     limit: int = -1
     freeze_decoder: bool = True
+    # LoRA parameters
+    use_lora: bool = False
+    lora_r: int = 8
+    lora_alpha: int = 16
+    lora_dropout: float = 0.05
+    lora_target_modules: str = "q_proj,v_proj"  # Comma-separated list of module names
 
 
 def parse_args():
@@ -104,6 +110,31 @@ def parse_args():
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--limit", type=int, default=-1)
     parser.add_argument("--freeze_decoder", default=False, action="store_true")
+    # LoRA arguments
+    parser.add_argument(
+        "--use_lora",
+        default=False,
+        action="store_true",
+        help="Use PEFT LoRA for fine-tuning",
+    )
+    parser.add_argument(
+        "--lora_r", type=int, default=8, help="Rank of LoRA adaptation matrices"
+    )
+    parser.add_argument(
+        "--lora_alpha", type=int, default=16, help="LoRA scaling factor"
+    )
+    parser.add_argument(
+        "--lora_dropout",
+        type=float,
+        default=0.05,
+        help="Dropout probability for LoRA layers",
+    )
+    parser.add_argument(
+        "--lora_target_modules",
+        type=str,
+        default="q_proj,v_proj",
+        help="Comma-separated list of modules to apply LoRA to",
+    )
     return parser.parse_args()
 
 
@@ -135,6 +166,11 @@ def main():
         wandb_project=args.wandb_project,
         limit=args.limit,
         freeze_decoder=args.freeze_decoder,
+        use_lora=args.use_lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        lora_target_modules=args.lora_target_modules,
     )
 
     wandb.init(project=config.wandb_project)
@@ -144,7 +180,19 @@ def main():
     print("---")
 
     ENCODER = LatentEncoder(
-        config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
+        config.model_name,
+        config.n_gist_tokens,
+        config.n_ae_tokens,
+        config.block_size,
+        use_lora=config.use_lora,
+        lora_r=config.lora_r,
+        lora_alpha=config.lora_alpha,
+        lora_dropout=config.lora_dropout,
+        lora_target_modules=(
+            config.lora_target_modules.split(",")
+            if config.lora_target_modules
+            else None
+        ),
     )
     DECODER = LatentDecoder(
         config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
@@ -202,10 +250,12 @@ def main():
     decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
 
     logger.info(
-        f"Encoder: {encoder_trainable_params/encoder_total_params:.2%} trainable/total parameters"
+        f"Encoder: {encoder_trainable_params:,} trainable / {encoder_total_params:,} total parameters "
+        f"({encoder_trainable_params/encoder_total_params:.2%})"
     )
     logger.info(
-        f"Decoder: {decoder_trainable_params/decoder_total_params:.2%} trainable/total parameters"
+        f"Decoder: {decoder_trainable_params:,} trainable / {decoder_total_params:,} total parameters "
+        f"({decoder_trainable_params/decoder_total_params:.2%})"
     )
 
     wandb.log(
@@ -218,7 +268,7 @@ def main():
     )
 
     OPTIMIZER = torch.optim.AdamW(
-        list(ENCODER.parameters()),
+        ENCODER.get_trainable_parameters(),  # Use the method to get only trainable parameters
         lr=config.learning_rate,
         weight_decay=config.weight_decay,
     )
