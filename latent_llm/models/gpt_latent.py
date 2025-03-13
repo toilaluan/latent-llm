@@ -198,18 +198,6 @@ class LatentEncoder(nn.Module):
         return instance
 
     def load_pretrained(self, repo_id: str):
-        print(f"Loading pretrained model from {repo_id}")
-        # Check if repo has PEFT adapter
-        try:
-            self.model = AutoModelForCausalLM.from_pretrained(repo_id)
-            # Try to load as PEFT model
-            self.model = PeftModel.from_pretrained(self.model, repo_id)
-            self.use_lora = True
-        except Exception as e:
-            # If it fails, load as regular model
-            self.model = AutoModelForCausalLM.from_pretrained(repo_id)
-            self.use_lora = False
-
         # Download safetensors file
         tokens_path = snapshot_download(
             repo_id=repo_id,
