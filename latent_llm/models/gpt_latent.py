@@ -308,7 +308,7 @@ class LatentDecoder(nn.Module):
     ) -> torch.Tensor:
         """Generate text using a more efficient approach with temperature sampling."""
         B = mem_embeds.size(0)
-        device = input_ids.device
+        device = self.model.device
 
         # Fix for empty input_ids: ensure generated_ids is properly initialized
         if input_ids is None:
