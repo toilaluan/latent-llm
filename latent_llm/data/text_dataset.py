@@ -25,7 +25,7 @@ class TextDataset(Dataset):
     ):
         self.dataset = load_dataset(dataset_id, split=split, num_proc=NUM_PROC)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.block_size = block_size
 
     def __len__(self):
@@ -51,7 +51,7 @@ class TextDataset(Dataset):
 class RandomTextDataset(Dataset):
     def __init__(self, model_name: str, block_size: int = 1024):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.block_size = block_size
         self.mnemo = Mnemonic("english")
 
