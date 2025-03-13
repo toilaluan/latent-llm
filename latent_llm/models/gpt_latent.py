@@ -18,19 +18,28 @@ if not os.path.exists(CKPT_DIR):
 
 class LatentEncoder(nn.Module):
     def __init__(
-        self, model_name: str, n_gist_tokens: int, n_ae_tokens: int, block_size: int
+        self,
+        model_name: str,
+        n_gist_tokens: int,
+        n_ae_tokens: int,
+        block_size: int,
+        torch_dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
+            attn_implementation="eager",
+            torch_dtype=torch_dtype,
         )
         self.base_config = self.model.config
         self.gist_tokens = nn.Parameter(
-            torch.randn(n_gist_tokens, self.base_config.hidden_size)
+            torch.randn(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.n_gist_tokens = n_gist_tokens
         self.ae_tokens = nn.Parameter(
-            torch.randn(n_ae_tokens, self.base_config.hidden_size)
+            torch.randn(
+                n_ae_tokens, self.base_config.hidden_size, dtype=torch_dtype
+            )
         )
         self.block_size = block_size
         self.init_weights()
@@ -136,10 +145,17 @@ class LatentEncoder(nn.Module):
 
 class LatentDecoder(nn.Module):
     def __init__(
-        self, model_name: str, n_gist_tokens: int, n_ae_tokens: int, block_size: int
+        self,
+        model_name: str,
+        n_gist_tokens: int,
+        n_ae_tokens: int,
+        block_size: int,
+        torch_dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name, attn_implementation="eager", torch_dtype=torch_dtype
+        )
         self.base_config = self.model.config
         self.mem_size = n_gist_tokens + n_ae_tokens
         self.block_size = block_size
