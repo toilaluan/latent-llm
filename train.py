@@ -58,11 +58,6 @@ def parse_args():
             else "mps" if torch.backends.mps.is_available() else "cpu"
         ),
     )
-    parser.add_argument(
-        "--precision",
-        type=str,
-        default="16-mixed" if torch.cuda.is_available() else "32",
-    )
     parser.add_argument("--log_interval", type=int, default=10)
     parser.add_argument("--validating_interval", type=int, default=100)
     parser.add_argument("--save_interval", type=int, default=1_000)
