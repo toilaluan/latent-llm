@@ -133,8 +133,7 @@ def main():
         logger.info(f"Latent embeds: {latent_embeds.shape}")
 
         generated_ids = decoder.generate(
-            mem_embeds=latent_embeds,
-            input_ids=None,  # Use empty input instead of first token
+            embeds=latent_embeds,
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
         )

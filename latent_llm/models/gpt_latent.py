@@ -300,8 +300,7 @@ class LatentDecoder(nn.Module):
 
     def generate(
         self,
-        mem_embeds: torch.Tensor,
-        input_ids: torch.Tensor,
+        embeds: torch.Tensor,
         max_new_tokens: int,
         temperature: float = 0.01,
         **kwargs,
@@ -309,32 +308,14 @@ class LatentDecoder(nn.Module):
         """Generate text using a more efficient approach with temperature sampling."""
         B = mem_embeds.size(0)
         device = self.model.device
-
-        # Fix for empty input_ids: ensure generated_ids is properly initialized
-        if input_ids is None:
-            generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
-        else:
-            generated_ids = input_ids.clone()
-
-        mem_embeds = mem_embeds.to(dtype=self.model.dtype)
-        if input_ids is not None:
-            # Initial input_embeds with memory embeddings
-            embeds = self.model.get_input_embeddings()(input_ids)
-            # Ensure mem_embeds has the same dtype as embeds
-            embeds = torch.cat([mem_embeds, embeds], dim=1)
-        else:
-            embeds = mem_embeds
-
+        generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
         # Create attention mask (1 for all tokens)
         attention_mask = torch.ones(
             (B, embeds.size(1)), dtype=torch.long, device=device
         )
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        total_tokens = min(
-            max_new_tokens, self.block_size - embeds.size(1) + mem_embeds.size(1)
-        )
         # Generate tokens one by one
-        for _ in range(total_tokens):
+        for _ in range(max_new_tokens):
             # Forward pass
             outputs = self.model(
                 inputs_embeds=embeds,
