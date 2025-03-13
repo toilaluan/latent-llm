@@ -35,6 +35,7 @@ class LatentEncoder(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch_dtype,
+            attn_implementation="flash_attention_2",
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.base_config = self.model.config
@@ -234,7 +235,7 @@ class LatentDecoder(nn.Module):
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=torch_dtype
+            model_name, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
         )
         self.base_config = self.model.config
         self.mem_size = n_gist_tokens + n_ae_tokens
