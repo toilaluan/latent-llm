@@ -100,7 +100,6 @@ def main():
         args.base_model_id, args.n_gist_tokens, args.n_ae_tokens, args.block_size
     )
     # The decoder just needs to load the model, no special tokens to load
-    decoder.model = AutoModelForCausalLM.from_pretrained(args.decoder_model_id)
     decoder.to(device)
     decoder.eval()
 
