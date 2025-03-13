@@ -306,6 +306,7 @@ class LatentDecoder(nn.Module):
         **kwargs,
     ) -> torch.Tensor:
         """Generate text using a more efficient approach with temperature sampling."""
+        embeds = embeds.to(self.model.dtype)
         B = embeds.size(0)
         device = self.model.device
         generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
