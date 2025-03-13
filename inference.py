@@ -73,7 +73,7 @@ def main():
     pipeline = GPTLatentVAEPipeline(
         pretrained_encoder_id=args.encoder_model_id,
         pretrained_decoder_id=args.decoder_model_id,
-        torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+        torch_dtype=torch.bfloat16,
     )
 
     # Prepare input text
