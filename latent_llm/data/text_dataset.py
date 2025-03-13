@@ -34,15 +34,6 @@ class TextDataset(Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.block_size = block_size
-        self.dataset = self.dataset.map(
-            self.tokenize,
-            batched=True,
-            batch_size=8,
-            num_proc=NUM_PROC,
-            input_columns=["text"],
-            cache_file_name=f"{cache_dir}/{dataset_id}_{split}_{block_size}.bin",
-            load_from_cache_file=True,
-        )
 
     def tokenize(self, texts: list[str]) -> dict:
         input_ids = self.tokenizer(
@@ -58,7 +49,20 @@ class TextDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, idx):
-        return torch.tensor(self.dataset[idx]["input_ids"])
+        text = self.dataset[idx]["text"]
+        words = text.split()
+        random.shuffle(words)
+        text = " ".join(words)
+        input_ids = self.tokenizer(
+            text,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.block_size,
+        ).input_ids
+        n_tokens = random.randint(1, self.block_size)
+        input_ids[0, :n_tokens] = self.tokenizer.pad_token_id
+        return input_ids.squeeze(0)
 
 
 class RandomTextDataset(Dataset):
