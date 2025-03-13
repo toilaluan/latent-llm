@@ -344,6 +344,8 @@ def main():
         if current_step >= config.training_steps:
             break
 
+        current_step += 1
+
 
 if __name__ == "__main__":
     main()
