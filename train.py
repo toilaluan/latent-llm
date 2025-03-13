@@ -28,45 +28,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class TrainingConfig:
-    model_name: str = "HuggingFaceTB/SmolLM2-135M"
-    dataset_id: str = "BEE-spoke-data/fineweb-100k_en-med"
-    split: str = "train"
-    dataset_type: str = "text"
-    block_size: int = 256
-    n_gist_tokens: int = 256
-    n_ae_tokens: int = 1
-    hub_repo_id: str = "toilaluan/smol-lm-2-135m-latent-encoder"
-    learning_rate: float = 1e-4
-    weight_decay: float = 1e-4
-    max_grad_norm: float = 1.0
-    max_epochs: int = 10
-    batch_size: int = 1
-    num_workers: int = 8
-    seed: int = 42
-    device: str = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
-    )
-    precision: str = "16-mixed" if device == "cuda" else "32"
-    log_interval: int = 10
-    validating_interval: int = 100
-    save_interval: int = 1_000
-    max_new_tokens: int = 512
-    training_steps: int = 100_000
-    wandb_project: str = "latent-llm"
-    limit: int = -1
-    freeze_decoder: bool = True
-    # LoRA parameters
-    use_lora: bool = False
-    lora_r: int = 8
-    lora_alpha: int = 16
-    lora_dropout: float = 0.05
-    lora_target_modules: str = "q_proj,v_proj"  # Comma-separated list of module names
-
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Training script for latent LLM.")
     parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM2-135M")
@@ -79,7 +40,7 @@ def parse_args():
     parser.add_argument("--n_gist_tokens", type=int, default=256)
     parser.add_argument("--n_ae_tokens", type=int, default=1)
     parser.add_argument(
-        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent"
+        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
     )
     parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
@@ -140,84 +101,50 @@ def parse_args():
 
 def main():
     args = parse_args()
-    config = TrainingConfig(
-        model_name=args.model_name,
-        dataset_id=args.dataset_id,
-        split=args.split,
-        dataset_type=args.dataset_type,
-        block_size=args.block_size,
-        n_gist_tokens=args.n_gist_tokens,
-        n_ae_tokens=args.n_ae_tokens,
-        hub_repo_id=args.hub_repo_id,
-        learning_rate=args.learning_rate,
-        weight_decay=args.weight_decay,
-        max_grad_norm=args.max_grad_norm,
-        max_epochs=args.max_epochs,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        seed=args.seed,
-        device=args.device,
-        precision=args.precision,
-        log_interval=args.log_interval,
-        validating_interval=args.validating_interval,
-        save_interval=args.save_interval,
-        max_new_tokens=args.max_new_tokens,
-        training_steps=args.training_steps,
-        wandb_project=args.wandb_project,
-        limit=args.limit,
-        freeze_decoder=args.freeze_decoder,
+
+    wandb.init(project=args.wandb_project)
+
+    print("--- Training Config ---")
+    logger.info(args)
+    print("---")
+
+    ENCODER = LatentEncoder(
+        args.model_name,
+        args.n_gist_tokens,
+        args.n_ae_tokens,
+        args.block_size,
         use_lora=args.use_lora,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
-        lora_target_modules=args.lora_target_modules,
-    )
-
-    wandb.init(project=config.wandb_project)
-
-    print("--- Training Config ---")
-    logger.info(config)
-    print("---")
-
-    ENCODER = LatentEncoder(
-        config.model_name,
-        config.n_gist_tokens,
-        config.n_ae_tokens,
-        config.block_size,
-        use_lora=config.use_lora,
-        lora_r=config.lora_r,
-        lora_alpha=config.lora_alpha,
-        lora_dropout=config.lora_dropout,
         lora_target_modules=(
-            config.lora_target_modules.split(",")
-            if config.lora_target_modules
-            else None
+            args.lora_target_modules.split(",") if args.lora_target_modules else None
         ),
     )
     DECODER = LatentDecoder(
-        config.model_name, config.n_gist_tokens, config.n_ae_tokens, config.block_size
+        args.model_name, args.n_gist_tokens, args.n_ae_tokens, args.block_size
     )
 
-    TOKENIZER = AutoTokenizer.from_pretrained(config.model_name)
+    TOKENIZER = AutoTokenizer.from_pretrained(args.model_name)
     TOKENIZER.pad_token = TOKENIZER.eos_token
 
-    if config.dataset_type == "text":
+    if args.dataset_type == "text":
         DATASET = TextDataset(
-            dataset_id=config.dataset_id,
-            split=config.split,
-            block_size=config.block_size,
-            model_name=config.model_name,
-            limit=config.limit,
+            dataset_id=args.dataset_id,
+            split=args.split,
+            block_size=args.block_size,
+            model_name=args.model_name,
+            limit=args.limit,
         )
     else:
         DATASET = RandomTextDataset(
-            model_name=config.model_name,
-            block_size=config.block_size,
+            model_name=args.model_name,
+            block_size=args.block_size,
         )
 
     DATALOADER = DataLoader(
         DATASET,
-        batch_size=config.batch_size,
+        batch_size=args.batch_size,
         shuffle=True,
     )
     DATALOADER = cycle(DATALOADER)
@@ -241,7 +168,7 @@ def main():
     ENCODER.train()
     DECODER.train()
 
-    if config.freeze_decoder:
+    if args.freeze_decoder:
         for param in DECODER.parameters():
             param.requires_grad = False
 
@@ -268,9 +195,9 @@ def main():
     )
 
     OPTIMIZER = torch.optim.AdamW(
-        ENCODER.get_trainable_parameters(),  # Use the method to get only trainable parameters
-        lr=config.learning_rate,
-        weight_decay=config.weight_decay,
+        ENCODER.get_trainable_parameters(),
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
     )
 
     ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
@@ -289,26 +216,26 @@ def main():
         wandb.log({"train/token_accuracy": token_accuracy.item()})
         accelerator.backward(loss)
         OPTIMIZER.step()
-        PROCESSED_TOKENS += config.block_size * config.batch_size
+        PROCESSED_TOKENS += args.block_size * args.batch_size
         TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
 
-        if current_step % config.log_interval == 0:
+        if current_step % args.log_interval == 0:
             logger.info(
-                f"[{current_step}/{config.training_steps}] loss: {loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+                f"[{current_step}/{args.training_steps}] loss: {loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
 
-        if config.save_interval > 0 and current_step % config.save_interval == 0:
+        if args.save_interval > 0 and current_step % args.save_interval == 0:
             logger.info("Saving to hub...")
             try:
                 # Unwrap models before pushing to hub
                 unwrapped_encoder = accelerator.unwrap_model(ENCODER)
                 unwrapped_decoder = accelerator.unwrap_model(DECODER)
-                unwrapped_encoder.push_to_hub(config.hub_repo_id + "-encoder")
-                unwrapped_decoder.push_to_hub(config.hub_repo_id + "-decoder")
+                unwrapped_encoder.push_to_hub(args.hub_repo_id + "-encoder")
+                unwrapped_decoder.push_to_hub(args.hub_repo_id + "-decoder")
             except Exception as e:
                 logger.error(f"Error pushing to hub: {e}")
 
-        if current_step % config.validating_interval == 0:
+        if current_step % args.validating_interval == 0:
             logger.info("Generating...")
             ENCODER.eval()
             DECODER.eval()
@@ -317,7 +244,7 @@ def main():
                 generated_ids = DECODER.generate(
                     mem_embeds[:1, :, :],
                     input_ids[:1, :1],  # Seed token
-                    max_new_tokens=config.max_new_tokens,
+                    max_new_tokens=args.max_new_tokens,
                 )
                 completion = TOKENIZER.decode(generated_ids[0])
                 label = TOKENIZER.decode(input_ids[0, :])
@@ -331,17 +258,17 @@ def main():
                     }
                 )
                 logger.info(
-                    f"[{current_step}/{config.training_steps}] completion: {completion[:32]}..."
+                    f"[{current_step}/{args.training_steps}] completion: {completion[:32]}..."
                 )
                 logger.info(
-                    f"[{current_step}/{config.training_steps}] label: {label[:32]}..."
+                    f"[{current_step}/{args.training_steps}] label: {label[:32]}..."
                 )
             ENCODER.train()
             DECODER.train()
             START_TIME = time.time()
             current_step += 1
 
-        if current_step >= config.training_steps:
+        if current_step >= args.training_steps:
             break
 
         current_step += 1
