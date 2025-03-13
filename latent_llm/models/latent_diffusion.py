@@ -355,7 +355,8 @@ def train_latent_diffusion(
         model.train()
 
         for step, batch in enumerate(train_dataloader):
-            clean_latents = batch["latents"].to(accelerator.device)
+            # Convert list to tensor before moving to device
+            clean_latents = torch.stack(batch["latents"]).to(accelerator.device)
 
             # Sample noise to add to the latents
             noise = torch.randn_like(clean_latents)
