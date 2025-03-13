@@ -72,6 +72,7 @@ def main():
     # Load tokenizer
     logger.info(f"Loading tokenizer from {args.encoder_model_id}")
     tokenizer = AutoTokenizer.from_pretrained(args.encoder_model_id)
+    logger.info(f"pad_token: {tokenizer.pad_token}")
 
     # Load encoder and decoder
     logger.info(f"Loading encoder from {args.encoder_model_id}")
