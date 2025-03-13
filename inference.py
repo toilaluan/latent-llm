@@ -1,9 +1,11 @@
 import torch
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 import argparse
 import logging
 from rich.logging import RichHandler
+import numpy as np
+from huggingface_hub import HfApi
 
 # Configure logging
 logging.basicConfig(
@@ -77,7 +79,33 @@ def main():
     encoder = LatentEncoder(
         args.base_model_id, args.n_gist_tokens, args.n_ae_tokens, args.block_size
     )
-    encoder.load_pretrained(args.encoder_model_id)
+
+    try:
+        encoder.load_pretrained(args.encoder_model_id)
+    except Exception as e:
+        logger.error(f"Error loading encoder: {e}")
+        logger.info("Attempting to load with allow_pickle=False...")
+        # Monkey patch the load_pretrained method to try without allow_pickle
+        original_load = encoder.load_pretrained
+
+        def patched_load(repo_id):
+            encoder.model = AutoModelForCausalLM.from_pretrained(repo_id)
+            hf_api = HfApi()
+            gist_tokens_path = hf_api.hf_hub_download(
+                repo_id=repo_id,
+                filename="gist_tokens.npy",
+            )
+            ae_tokens_path = hf_api.hf_hub_download(
+                repo_id=repo_id,
+                filename="ae_tokens.npy",
+            )
+
+            # Try loading without allow_pickle
+            encoder.gist_tokens.data = torch.from_numpy(np.load(gist_tokens_path))
+            encoder.ae_tokens.data = torch.from_numpy(np.load(ae_tokens_path))
+
+        patched_load(args.encoder_model_id)
+
     encoder.to(device)
     encoder.eval()
 
