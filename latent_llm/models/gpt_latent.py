@@ -37,9 +37,7 @@ class LatentEncoder(nn.Module):
         )
         self.n_gist_tokens = n_gist_tokens
         self.ae_tokens = nn.Parameter(
-            torch.randn(
-                n_ae_tokens, self.base_config.hidden_size, dtype=torch_dtype
-            )
+            torch.randn(n_ae_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.block_size = block_size
         self.init_weights()
@@ -232,6 +230,8 @@ class LatentDecoder(nn.Module):
 
         # Initial input_embeds with memory embeddings
         embeds = self.model.get_input_embeddings()(input_ids)
+        # Ensure mem_embeds has the same dtype as embeds
+        mem_embeds = mem_embeds.to(dtype=embeds.dtype)
         embeds = torch.cat([mem_embeds, embeds], dim=1)
 
         # Create attention mask (1 for all tokens)
