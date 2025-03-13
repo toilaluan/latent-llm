@@ -309,13 +309,21 @@ class LatentDecoder(nn.Module):
         """Generate text using a more efficient approach with temperature sampling."""
         B = input_ids.size(0)
         device = input_ids.device
-        generated_ids = input_ids.clone()
 
-        # Initial input_embeds with memory embeddings
-        embeds = self.model.get_input_embeddings()(input_ids)
-        # Ensure mem_embeds has the same dtype as embeds
-        mem_embeds = mem_embeds.to(dtype=embeds.dtype)
-        embeds = torch.cat([mem_embeds, embeds], dim=1)
+        # Fix for empty input_ids: ensure generated_ids is properly initialized
+        if input_ids.size(1) == 0:
+            generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
+        else:
+            generated_ids = input_ids.clone()
+
+        mem_embeds = mem_embeds.to(dtype=self.model.dtype)
+        if input_ids.size(1) > 0:
+            # Initial input_embeds with memory embeddings
+            embeds = self.model.get_input_embeddings()(input_ids)
+            # Ensure mem_embeds has the same dtype as embeds
+            embeds = torch.cat([mem_embeds, embeds], dim=1)
+        else:
+            embeds = mem_embeds
 
         # Create attention mask (1 for all tokens)
         attention_mask = torch.ones(
@@ -344,13 +352,15 @@ class LatentDecoder(nn.Module):
             if (next_token == self.model.config.eos_token_id).all():
                 break
 
-            # Append new tokens
-            generated_ids = torch.cat([generated_ids, next_token.unsqueeze(-1)], dim=-1)
+            # Append new tokens - handle both empty and non-empty cases
+            next_token = next_token.unsqueeze(-1)
+            if generated_ids.size(1) == 0:
+                generated_ids = next_token
+            else:
+                generated_ids = torch.cat([generated_ids, next_token], dim=-1)
 
             # Update input embeddings for next iteration
-            next_token_embeds = self.model.get_input_embeddings()(
-                next_token.unsqueeze(-1)
-            )
+            next_token_embeds = self.model.get_input_embeddings()(next_token)
             embeds = torch.cat([embeds, next_token_embeds], dim=1)
 
             # Update attention mask
