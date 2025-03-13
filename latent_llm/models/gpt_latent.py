@@ -425,7 +425,7 @@ class GPTLatentVAEPipeline:
                 torch_dtype=self.torch_dtype,
             )
             self.decoder.eval()
-            self.decoder.to(device)
+            self.decoder.to(self.device)
 
     def encode(self, text: str) -> torch.Tensor:
         """
