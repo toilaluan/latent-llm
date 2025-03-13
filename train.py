@@ -134,6 +134,7 @@ def main():
         training_steps=args.training_steps,
         wandb_project=args.wandb_project,
         limit=args.limit,
+        freeze_decoder=args.freeze_decoder,
     )
 
     wandb.init(project=config.wandb_project)
