@@ -35,16 +35,6 @@ class TextDataset(Dataset):
         self.tokenizer.pad_token = self.tokenizer.eos_token
         self.block_size = block_size
 
-    def tokenize(self, texts: list[str]) -> dict:
-        input_ids = self.tokenizer(
-            texts,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=self.block_size,
-        ).input_ids
-        return {"input_ids": input_ids}
-
     def __len__(self):
         return len(self.dataset)
 
