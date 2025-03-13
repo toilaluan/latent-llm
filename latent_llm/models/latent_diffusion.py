@@ -267,7 +267,7 @@ def train_latent_diffusion(
 
     # Get latent dimensionality
     # We'll create a small sample to determine latent dim
-    dummy_input = torch.ones(1, encoder.block_size).long()
+    dummy_input = torch.ones(1, encoder.block_size).long().to(encoder.device)
     dummy_pad_id = 0  # Assuming 0 is pad token ID
     with torch.no_grad():
         latent = encoder(dummy_input, dummy_pad_id)
