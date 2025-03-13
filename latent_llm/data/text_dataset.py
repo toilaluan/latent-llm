@@ -86,6 +86,8 @@ class RandomTextDataset(Dataset):
             truncation=True,
             max_length=self.block_size,
         ).input_ids
+        n_tokens = random.randint(1, self.block_size)
+        input_ids[0, :n_tokens] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
 
