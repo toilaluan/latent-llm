@@ -190,7 +190,7 @@ class LatentEncoder(nn.Module):
             n_ae_tokens=config["n_ae_tokens"],
             block_size=config["block_size"],
             torch_dtype=torch_dtype,
-            use_lora=config.get("use_lora", False),  # Default to False if not specified
+            use_lora=False,  # Default to False if not specified
         )
 
         # Load weights
