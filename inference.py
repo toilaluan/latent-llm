@@ -70,8 +70,8 @@ def main():
     logger.info(f"Using device: {device}")
 
     # Load tokenizer
-    logger.info(f"Loading tokenizer from {args.base_model_id}")
-    tokenizer = AutoTokenizer.from_pretrained(args.base_model_id)
+    logger.info(f"Loading tokenizer from {args.encoder_model_id}")
+    tokenizer = AutoTokenizer.from_pretrained(args.encoder_model_id)
     tokenizer.pad_token = tokenizer.eos_token
 
     # Load encoder and decoder

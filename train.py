@@ -120,7 +120,10 @@ def main():
     )
 
     TOKENIZER = AutoTokenizer.from_pretrained(args.model_name)
-    TOKENIZER.pad_token = TOKENIZER.eos_token
+    # Add new pad token
+    TOKENIZER.add_special_tokens({"pad_token": "<|pad|>"})
+    TOKENIZER.push_to_hub(args.hub_repo_id + "-encoder")
+    logger.info(f"pad_token: {TOKENIZER.pad_token}")
 
     if args.dataset_type == "text":
         DATASET = TextDataset(
