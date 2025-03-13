@@ -42,6 +42,7 @@ class TextDataset(Dataset):
             padding="max_length",
             truncation=True,
             max_length=self.block_size,
+            add_special_tokens=True,
         ).input_ids
         n_tokens = random.randint(1, self.block_size)
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
