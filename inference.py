@@ -86,11 +86,6 @@ def main():
         encoder = LatentEncoder(
             args.base_model_id, args.n_gist_tokens, args.n_ae_tokens, args.block_size
         )
-        try:
-            encoder.load_pretrained(args.encoder_model_id)
-        except Exception as e:
-            logger.error(f"Error loading encoder: {e}")
-            raise e
 
     encoder.eval()
 
