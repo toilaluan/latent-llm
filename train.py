@@ -131,7 +131,6 @@ def main():
             split=args.split,
             block_size=args.block_size,
             model_name=args.model_name,
-            limit=args.limit,
         )
     else:
         DATASET = RandomTextDataset(
