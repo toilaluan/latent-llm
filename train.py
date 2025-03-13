@@ -233,6 +233,7 @@ def main():
     START_TIME = time.time()
 
     for batch in DATALOADER:
+        current_step += 1
         OPTIMIZER.zero_grad()
         loss, mem_embeds, input_ids, token_accuracy = training_step(batch)
         wandb.log({"train/loss": loss.item()})
@@ -292,8 +293,6 @@ def main():
 
         if current_step >= config.training_steps:
             break
-
-        current_step += 1
 
 
 if __name__ == "__main__":
