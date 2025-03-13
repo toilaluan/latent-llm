@@ -324,6 +324,7 @@ def train_latent_diffusion(
         batched=True,
         batch_size=32,
         remove_columns=["text"],
+        cache_file_name=os.path.join(output_dir, "processed_dataset.cache"),
     )
 
     # Create dataloader
