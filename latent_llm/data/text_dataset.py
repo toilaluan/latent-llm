@@ -43,7 +43,7 @@ class TextDataset(Dataset):
             max_length=self.block_size,
             add_special_tokens=True,
         ).input_ids
-        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(alpha=1, beta=5))
+        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(1, 5))
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
@@ -73,8 +73,7 @@ class RandomTextDataset(Dataset):
             truncation=True,
             max_length=self.block_size,
         ).input_ids
-
-        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(alpha=1, beta=5))
+        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(1, 5))
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
