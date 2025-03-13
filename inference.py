@@ -72,7 +72,6 @@ def main():
     # Load tokenizer
     logger.info(f"Loading tokenizer from {args.encoder_model_id}")
     tokenizer = AutoTokenizer.from_pretrained(args.encoder_model_id)
-    tokenizer.pad_token = tokenizer.eos_token
 
     # Load encoder and decoder
     logger.info(f"Loading encoder from {args.encoder_model_id}")
