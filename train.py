@@ -224,9 +224,7 @@ def main():
             try:
                 # Unwrap models before pushing to hub
                 unwrapped_encoder = accelerator.unwrap_model(ENCODER)
-                unwrapped_decoder = accelerator.unwrap_model(DECODER)
                 unwrapped_encoder.push_to_hub(args.hub_repo_id + "-encoder")
-                unwrapped_decoder.push_to_hub(args.hub_repo_id + "-decoder")
             except Exception as e:
                 logger.error(f"Error pushing to hub: {e}")
 
