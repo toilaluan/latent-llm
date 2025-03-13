@@ -2,8 +2,7 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 import os
-import torch
-from nltk.corpus import words
+import numpy as np
 import random
 from mnemonic import Mnemonic
 
@@ -44,7 +43,7 @@ class TextDataset(Dataset):
             max_length=self.block_size,
             add_special_tokens=True,
         ).input_ids
-        n_tokens = random.randint(1, self.block_size)
+        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(alpha=1, beta=5))
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
@@ -74,7 +73,8 @@ class RandomTextDataset(Dataset):
             truncation=True,
             max_length=self.block_size,
         ).input_ids
-        n_tokens = random.randint(1, self.block_size)
+
+        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(alpha=1, beta=5))
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
