@@ -237,14 +237,18 @@ class GPTLatentFlowMatchingPipeline:
         self.tokenizer = self.encoder.tokenizer
 
         # Extract model parameters
-        config_path = snapshot_download(
-            repo_id=encoder_model_id,
-            allow_patterns=["latent_config.json"],
-        )
-        config_path = os.path.join(config_path, "latent_config.json")
+        try:
+            config_path = snapshot_download(
+                repo_id=encoder_model_id,
+                allow_patterns=["latent_config.json"],
+            )
+            config_path = os.path.join(config_path, "latent_config.json")
 
-        with open(config_path, "r") as f:
-            self.config = json.load(f)
+            with open(config_path, "r") as f:
+                self.config = json.load(f)
+        except Exception as e:
+            print(f"Error loading config: {e}")
+            raise
 
         # Load flow matching model
         if os.path.isdir(flow_matching_model_id):
@@ -263,7 +267,7 @@ class GPTLatentFlowMatchingPipeline:
                 device=device,
             )
             # Load state dict
-            self.flow_model.load_state_dict(torch.load(model_path))
+            self.flow_model.load_state_dict(torch.load(model_path, map_location=device))
         else:
             # HuggingFace Hub ID
             # Download config
@@ -311,7 +315,6 @@ class GPTLatentFlowMatchingPipeline:
             )
         else:
             # Load separate decoder
-            # For simplicity, assuming decoder config can be accessed the same way
             self.decoder = LatentDecoder(
                 model_name=decoder_model_id,
                 n_gist_tokens=self.config["n_gist_tokens"],
