@@ -442,10 +442,6 @@ def evaluate(
                 input_ids=prefix, initial_noise=initial_noise, num_steps=100
             )
             predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
-
-            # Sanitize latents with clamping
-            predicted_latents = torch.clamp(predicted_latents, min=-3.0, max=3.0)
-
             # Track latent statistics
             latent_means.append(predicted_latents.mean().item())
             latent_stds.append(predicted_latents.std().item())
