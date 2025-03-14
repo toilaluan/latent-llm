@@ -119,6 +119,8 @@ class GPTLatentFlowMatching(nn.Module):
             [[t / self.max_steps] for t in timesteps], device=self.device
         )  # Shape [B, 1]
         sigmas = sigmas.to(self.torch_dtype)
+        # Reshape sigmas to [B, 1, 1] for proper broadcasting with [B, T, D]
+        sigmas = sigmas.unsqueeze(-1)
         # Sample noise
         noise = torch.randn_like(latents, device=self.device, dtype=self.torch_dtype)
         # Interpolate between source and target
