@@ -173,10 +173,12 @@ class GPTLatentFlowMatching(nn.Module):
         Returns:
             Sampled latent vectors
         """
+        initial_noise = initial_noise.to(self.device, dtype=self.torch_dtype)
+        input_ids = input_ids.to(self.device)
         attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
 
         # Start with random noise
-        current_latent = initial_noise.to(self.device)
+        current_latent = initial_noise
         step_size = 1.0 / num_steps
 
         # Euler integration
