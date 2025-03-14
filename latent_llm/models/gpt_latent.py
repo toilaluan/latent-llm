@@ -115,7 +115,7 @@ class LatentEncoder(nn.Module):
             ],
             dim=1,
         )
-        masks = torch.cat([masks, self.gist_masks], dim=1)
+        masks = torch.cat([masks, self.gist_masks.repeat(B, 1)], dim=1)
 
         last_hidden_states = self.model(
             inputs_embeds=embeds,
