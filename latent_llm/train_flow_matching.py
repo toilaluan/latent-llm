@@ -320,6 +320,13 @@ def train_one_epoch(
                 1, args.max_steps + 1, (batch_size,), device=device
             ).tolist()
 
+            # Log wandb timesteps
+            wandb.log(
+                {
+                    "train/timesteps": wandb.Histogram(timesteps),
+                }
+            )
+
             # Calculate flow matching loss
             loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
             # Scale loss by the number of accumulation steps to maintain effective learning rate
