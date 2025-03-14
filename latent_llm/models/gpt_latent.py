@@ -30,7 +30,7 @@ class LatentEncoder(nn.Module):
         lora_alpha: int = 16,
         lora_dropout: float = 0.05,
         lora_target_modules: Optional[list] = None,
-        kl_weight: float = 0.1,
+        kl_weight: float = 1e-3,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
