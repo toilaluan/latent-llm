@@ -235,12 +235,15 @@ def train_one_epoch(
 ):
     model.train()
     total_loss = 0
+    total_steps = len(dataloader) * args.repeat_per_encode_pass
 
+    # Create a single progress bar for all steps (batch × repeats)
     progress_bar = tqdm(
-        enumerate(dataloader), total=len(dataloader), desc=f"Epoch {epoch}"
+        total=total_steps,
+        desc=f"Epoch {epoch}",
     )
 
-    for step, batch in progress_bar:
+    for batch_idx, batch in enumerate(dataloader):
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
         suffix_tokens = batch["suffix"].to(device)
@@ -254,6 +257,8 @@ def train_one_epoch(
         # Sample random timesteps
         batch_size = prefix_tokens.size(0)
         optimizer.zero_grad()  # Zero gradients once before the loop
+        accumulated_loss = 0
+
         for i in range(args.repeat_per_encode_pass):
             timesteps = torch.randint(1, model.max_steps + 1, (batch_size,)).tolist()
 
@@ -262,19 +267,28 @@ def train_one_epoch(
             # Scale loss by the number of accumulation steps to maintain effective learning rate
             scaled_loss = loss / args.repeat_per_encode_pass
             scaled_loss.backward()  # Gradients will accumulate across iterations
+
+            accumulated_loss += loss.item()
+
+            # Update progress bar for each repeat step
+            progress_bar.update(1)
+            progress_bar.set_postfix({"loss": loss.item()})
+
+        # Average loss for the batch
+        avg_batch_loss = accumulated_loss / args.repeat_per_encode_pass
         optimizer.step()  # Step optimizer once after the loop
 
-        # Logging
-        total_loss += loss.item()
-        progress_bar.set_postfix({"loss": loss.item()})
+        # Logging - use batch_idx instead of step
+        total_loss += avg_batch_loss
 
         # Log to wandb
-        if args.use_wandb and step % args.log_interval == 0:
+        if args.use_wandb and batch_idx % args.log_interval == 0:
+            global_step = batch_idx + epoch * len(dataloader)
             wandb.log(
                 {
-                    "train/loss": loss.item(),
+                    "train/loss": avg_batch_loss,
                     "train/epoch": epoch,
-                    "train/step": step + epoch * len(dataloader),
+                    "train/step": global_step,
                 }
             )
 
@@ -283,7 +297,7 @@ def train_one_epoch(
         #     save_checkpoint(model, optimizer, epoch, step, args)
 
         # Run evaluation
-        if step % args.eval_interval == 0:
+        if batch_idx % args.eval_interval == 0:
             evaluate(
                 model,
                 encoder,
@@ -292,7 +306,7 @@ def train_one_epoch(
                 tokenizer,
                 device,
                 epoch,
-                step,
+                batch_idx,
                 args,
             )
 
