@@ -192,8 +192,12 @@ def main():
         }
     )
 
+    TRAIN_PARAMS = []
+    TRAIN_PARAMS.extend([p for p in ENCODER.parameters() if p.requires_grad])
+    TRAIN_PARAMS.extend([p for p in DECODER.parameters() if p.requires_grad])
+
     OPTIMIZER = torch.optim.AdamW(
-        ENCODER.get_trainable_parameters(),
+        TRAIN_PARAMS,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
