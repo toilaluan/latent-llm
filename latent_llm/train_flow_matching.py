@@ -295,7 +295,7 @@ def train_one_epoch(
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
         suffix_tokens = batch["suffix"].to(device)
-        print(suffix_tokens)
+        print(suffix_tokens[0])
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
             suffix_latents, _, _ = encoder(suffix_tokens, tokenizer.pad_token_id)
