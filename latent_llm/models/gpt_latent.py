@@ -85,7 +85,9 @@ class LatentEncoder(nn.Module):
             ],
             dim=0,
         )
+        gist_masks = torch.ones(self.n_gist_tokens, dtype=torch.int64)
         self.register_buffer("position_ids", position_ids)
+        self.register_buffer("gist_masks", gist_masks)
 
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens_mean)
@@ -150,10 +152,7 @@ class LatentEncoder(nn.Module):
             ],
             dim=1,
         )
-        gist_masks = torch.ones(
-            B, self.n_gist_tokens, device=masks.device, dtype=torch.int64
-        )
-        masks = torch.cat([masks, gist_masks], dim=1)
+        masks = torch.cat([masks, self.gist_masks], dim=1)
 
         last_hidden_states = self.model(
             inputs_embeds=embeds,
@@ -342,7 +341,7 @@ class LatentDecoder(nn.Module):
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
         logits = self.model(
             inputs_embeds=embeds,
-            # position_ids=position_ids,
+            position_ids=position_ids,
         ).logits
         # labels = [a b c d], mem_embeds = [m m m m]
         # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
@@ -393,7 +392,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
-                # position_ids=position_ids,
+                position_ids=position_ids,
             )
             logits = outputs.logits[:, -1, :]
             # Apply temperature scaling
