@@ -12,7 +12,7 @@ from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
-VAE_SHIFT = 0.07
+VAE_SHIFT = -0.07
 VAE_SCALE = 4.02
 
 
