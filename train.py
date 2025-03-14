@@ -169,6 +169,7 @@ def main():
         TRAIN_PARAMS,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
+        betas=(0.9, 0.95),
     )
 
     ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
