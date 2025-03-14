@@ -189,6 +189,12 @@ def parse_args():
         default="bfloat16",
         help="Data type for model parameters",
     )
+    parser.add_argument(
+        "--repeat_per_encode_pass",
+        type=int,
+        default=100,
+        help="Number of times to sample different timesteps per encoded batch",
+    )
 
     return parser.parse_args()
 
@@ -247,13 +253,16 @@ def train_one_epoch(
 
         # Sample random timesteps
         batch_size = prefix_tokens.size(0)
-        timesteps = torch.randint(1, model.max_steps + 1, (batch_size,)).tolist()
+        optimizer.zero_grad()  # Zero gradients once before the loop
+        for i in range(args.repeat_per_encode_pass):
+            timesteps = torch.randint(1, model.max_steps + 1, (batch_size,)).tolist()
 
-        # Calculate flow matching loss
-        optimizer.zero_grad()
-        loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
-        loss.backward()
-        optimizer.step()
+            # Calculate flow matching loss
+            loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
+            # Scale loss by the number of accumulation steps to maintain effective learning rate
+            scaled_loss = loss / args.repeat_per_encode_pass
+            scaled_loss.backward()  # Gradients will accumulate across iterations
+        optimizer.step()  # Step optimizer once after the loop
 
         # Logging
         total_loss += loss.item()
