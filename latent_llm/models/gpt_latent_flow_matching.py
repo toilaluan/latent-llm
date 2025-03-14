@@ -116,16 +116,13 @@ class GPTLatentFlowMatching(nn.Module):
         assert all(t <= self.max_steps for t in timesteps), "Timestep out of range"
         sigmas = torch.tensor(
             [[t / self.max_steps] for t in timesteps], device=self.device
-        )
-        sigmas = sigmas.unsqueeze(-1).unsqueeze(-1)  # [B, 1, 1]
-
-        print("sigmas", sigmas.shape)
-        print("latents", latents.shape)
+        )  # Shape [B, 1]
 
         # Sample noise
         noise = torch.randn_like(latents, device=self.device)
 
         print("noise", noise.shape)
+        print(sigmas)
         # Interpolate between source and target
         noised_latents = (1.0 - sigmas) * latents + sigmas * noise
 
