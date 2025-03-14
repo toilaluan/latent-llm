@@ -101,6 +101,17 @@ class LatentEncoder(nn.Module):
         self, input_ids: torch.Tensor, pad_token_id: int
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
+        if input_ids.size(1) < self.block_size:
+            input_ids = torch.cat(
+                [
+                    input_ids,
+                    torch.ones(
+                        B, self.block_size - input_ids.size(1), device=input_ids.device
+                    )
+                    * pad_token_id,
+                ],
+                dim=1,
+            )
         embeds = self.model.get_input_embeddings()(input_ids)
         position_ids = self.position_ids.repeat(B, 1)
         masks = input_ids != pad_token_id
