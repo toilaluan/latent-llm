@@ -150,7 +150,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Get noised latents and target vector field
         noised_latents, target_vector_field = self.get_noised_latent(latents, timesteps)
-
+        print(noised_latents.shape, target_vector_field.shape)
         # Predict vector field
         predicted_vector_field = self.forward(
             input_ids=input_ids,
