@@ -167,8 +167,8 @@ def main():
     ENCODER.train()
     DECODER.train()
 
-    ENCODER = torch.compile(ENCODER)
-    DECODER = torch.compile(DECODER)
+    ENCODER.forward = torch.compile(ENCODER.forward)
+    DECODER.forward = torch.compile(DECODER.forward)
 
     if args.freeze_decoder:
         for param in DECODER.parameters():
