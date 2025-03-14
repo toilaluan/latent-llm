@@ -65,6 +65,7 @@ def parse_args():
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--kl_weight", type=float, default=1e-4)
+    parser.add_argument("--use_normalization", type=bool, default=False)
     return parser.parse_args()
 
 
@@ -199,7 +200,8 @@ def main():
             }
         )
         accelerator.backward(total_loss)
-        torch.nn.utils.clip_grad_norm_(TRAIN_PARAMS, 1.0)
+        if args.use_normalization:
+            torch.nn.utils.clip_grad_norm_(TRAIN_PARAMS, 1.0)
         OPTIMIZER.step()
         PROCESSED_TOKENS += args.block_size * args.batch_size
         TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
