@@ -98,7 +98,7 @@ class LatentEncoder(nn.Module):
             return [self.gist_tokens, self.ae_tokens, *self.model.parameters()]
 
     def forward(
-        self, input_ids: torch.Tensor, pad_token_id: int
+        self, input_ids: torch.Tensor, pad_token_id: int, include_ae_tokens: bool = True
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         if input_ids.size(1) < self.block_size:
@@ -133,8 +133,11 @@ class LatentEncoder(nn.Module):
             position_ids=position_ids,
         ).hidden_states[-1]
         gisted_embeds = last_hidden_states[:, -self.n_gist_tokens :, :]
-        ae_embeds = self.ae_tokens.repeat(B, 1, 1)
-        return torch.cat([gisted_embeds, ae_embeds], dim=1)
+        if include_ae_tokens:
+            ae_embeds = self.ae_tokens.repeat(B, 1, 1)
+            return torch.cat([gisted_embeds, ae_embeds], dim=1)
+        else:
+            return gisted_embeds
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         if self.use_lora:

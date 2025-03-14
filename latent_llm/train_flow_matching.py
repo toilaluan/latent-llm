@@ -234,7 +234,9 @@ def train_one_epoch(
 
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
-            suffix_latents = encoder(suffix_tokens, tokenizer.pad_token_id)
+            suffix_latents = encoder(
+                suffix_tokens, tokenizer.pad_token_id, include_ae_tokens=False
+            )
 
         # Sample random timesteps
         batch_size = prefix_tokens.size(0)
