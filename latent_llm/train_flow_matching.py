@@ -294,6 +294,8 @@ def train_one_epoch(
         desc=f"Epoch {epoch}",
     )
 
+    timesteps_histogram = {}
+
     for batch_idx, batch in enumerate(dataloader):
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
@@ -320,10 +322,15 @@ def train_one_epoch(
                 1, args.max_steps + 1, (batch_size,), device=device
             ).tolist()
 
+            for timestep in timesteps:
+                if timestep not in timesteps_histogram:
+                    timesteps_histogram[timestep] = 0
+                timesteps_histogram[timestep] += 1
+
             # Log wandb timesteps
             wandb.log(
                 {
-                    "train/timesteps": wandb.Histogram(timesteps),
+                    "train/timesteps": wandb.Histogram(timesteps_histogram),
                 }
             )
 
