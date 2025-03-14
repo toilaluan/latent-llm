@@ -273,7 +273,7 @@ def train_one_epoch(
             save_checkpoint(model, optimizer, epoch, step, args)
 
         # Run evaluation
-        if step % args.eval_interval == 0 and step > 0:
+        if step % args.eval_interval == 0:
             evaluate(
                 model,
                 encoder,
