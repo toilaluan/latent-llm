@@ -294,7 +294,8 @@ def train_one_epoch(
         desc=f"Epoch {epoch}",
     )
     timesteps_histogram = []
-
+    vae_means = []
+    vae_stds = []
     for batch_idx, batch in enumerate(dataloader):
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
@@ -305,6 +306,10 @@ def train_one_epoch(
             suffix_latents = encoder(
                 suffix_tokens, tokenizer.pad_token_id, include_ae_tokens=False
             )
+            vae_mean = suffix_latents.mean().item()
+            vae_std = suffix_latents.std().item()
+            vae_means.append(vae_mean)
+            vae_stds.append(vae_std)
 
         # Sample random timesteps
         batch_size = prefix_tokens.size(0)
@@ -340,7 +345,13 @@ def train_one_epoch(
 
             # Update progress bar for each repeat step
             progress_bar.update(1)
-            progress_bar.set_postfix({"loss": loss.item()})
+            progress_bar.set_postfix(
+                {
+                    "loss": loss.item(),
+                    "total_vae_mean": sum(vae_means) / len(vae_means),
+                    "total_vae_std": sum(vae_stds) / len(vae_stds),
+                }
+            )
 
         # Average loss for the batch
         avg_batch_loss = accumulated_loss / args.repeat_per_encode_pass
