@@ -119,6 +119,10 @@ class GPTLatentFlowMatching(nn.Module):
         )
         sigmas = sigmas.unsqueeze(-1).unsqueeze(-1)  # [B, 1, 1]
 
+        print("sigmas", sigmas.shape)
+        print("latents", latents.shape)
+        print("noise", noise.shape)
+
         # Sample noise
         noise = torch.randn_like(latents, device=self.device)
 
