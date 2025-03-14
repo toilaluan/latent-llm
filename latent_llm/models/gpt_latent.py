@@ -5,10 +5,8 @@ import torch.nn.functional as F
 from typing import Optional, Tuple
 import os
 from huggingface_hub import HfApi
-import numpy as np
 from huggingface_hub import snapshot_download
 from safetensors.torch import save_file, load_file
-from peft import get_peft_model, LoraConfig, TaskType, PeftModel
 
 
 CKPT_DIR = ".training_cache/checkpoints"
@@ -24,11 +22,6 @@ class LatentEncoder(nn.Module):
         n_gist_tokens: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
-        use_lora: bool = False,
-        lora_r: int = 8,
-        lora_alpha: int = 16,
-        lora_dropout: float = 0.05,
-        lora_target_modules: Optional[list] = None,
         kl_weight: float = 1e-4,
     ):
         super().__init__()
@@ -39,24 +32,6 @@ class LatentEncoder(nn.Module):
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.base_config = self.model.config
-
-        # Apply LoRA if specified
-        self.use_lora = use_lora
-        if use_lora:
-            if lora_target_modules is None:
-                # Default target modules for transformer models
-                lora_target_modules = ["q_proj", "v_proj"]
-
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                inference_mode=False,
-                r=lora_r,
-                lora_alpha=lora_alpha,
-                lora_dropout=lora_dropout,
-                target_modules=lora_target_modules,
-            )
-            self.model = get_peft_model(self.model, lora_config)
-            self.model.print_trainable_parameters()
 
         # For VAE, we need separate parameters for mean and log variance
         self.gist_tokens_mean = nn.Parameter(
@@ -92,18 +67,6 @@ class LatentEncoder(nn.Module):
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens_mean)
         torch.nn.init.zeros_(self.gist_tokens_logvar)
-
-    def get_trainable_parameters(self):
-        if self.use_lora:
-            return [self.gist_tokens_mean, self.gist_tokens_logvar] + [
-                p for p in self.model.parameters() if p.requires_grad
-            ]
-        else:
-            return [
-                self.gist_tokens_mean,
-                self.gist_tokens_logvar,
-                *self.model.parameters(),
-            ]
 
     def reparameterize(self, mean, logvar):
         """
@@ -177,12 +140,7 @@ class LatentEncoder(nn.Module):
         return gisted_embeds, kl_loss, mean
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
-        if self.use_lora:
-            self.model.save_pretrained(f"{ckpt_dir}/{repo_id}")
-            # Upload the PEFT adapter to Hub
-            self.model.push_to_hub(repo_id)
-        else:
-            self.model.push_to_hub(repo_id)
+        self.model.push_to_hub(repo_id)
 
         folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
         if not os.path.exists(folder):
@@ -200,7 +158,6 @@ class LatentEncoder(nn.Module):
         config = {
             "n_gist_tokens": self.n_gist_tokens,
             "block_size": self.block_size,
-            "use_lora": self.use_lora,
             "kl_weight": self.kl_weight,
         }
         import json
@@ -255,7 +212,6 @@ class LatentEncoder(nn.Module):
             n_gist_tokens=config["n_gist_tokens"],
             block_size=config["block_size"],
             torch_dtype=torch_dtype,
-            use_lora=False,  # Default to False if not specified
             kl_weight=kl_weight,
         )
 

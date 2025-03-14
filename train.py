@@ -64,32 +64,6 @@ def parse_args():
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--limit", type=int, default=-1)
-    parser.add_argument("--freeze_decoder", default=False, action="store_true")
-    # LoRA arguments
-    parser.add_argument(
-        "--use_lora",
-        default=False,
-        action="store_true",
-        help="Use PEFT LoRA for fine-tuning",
-    )
-    parser.add_argument(
-        "--lora_r", type=int, default=8, help="Rank of LoRA adaptation matrices"
-    )
-    parser.add_argument(
-        "--lora_alpha", type=int, default=16, help="LoRA scaling factor"
-    )
-    parser.add_argument(
-        "--lora_dropout",
-        type=float,
-        default=0.05,
-        help="Dropout probability for LoRA layers",
-    )
-    parser.add_argument(
-        "--lora_target_modules",
-        type=str,
-        default="q_proj,v_proj",
-        help="Comma-separated list of modules to apply LoRA to",
-    )
     return parser.parse_args()
 
 
@@ -106,13 +80,6 @@ def main():
         model_name=args.model_name,
         n_gist_tokens=args.n_gist_tokens,
         block_size=args.block_size,
-        use_lora=args.use_lora,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        lora_target_modules=(
-            args.lora_target_modules.split(",") if args.lora_target_modules else None
-        ),
     )
     DECODER = LatentDecoder(
         model_name=args.model_name,
@@ -169,10 +136,6 @@ def main():
 
     ENCODER.forward = torch.compile(ENCODER.forward)
     DECODER.forward = torch.compile(DECODER.forward)
-
-    if args.freeze_decoder:
-        for param in DECODER.parameters():
-            param.requires_grad = False
 
     # Log the number of parameters
     encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
