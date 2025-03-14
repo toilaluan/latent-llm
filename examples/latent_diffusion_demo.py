@@ -16,7 +16,7 @@ import tempfile
 from datasets import Dataset
 from transformers import AutoTokenizer
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
-from latent_llm.models.latent_diffusion import (
+from latent_llm.models.gpt_latent_diffusion import (
     LatentDiffusionModel,
     train_latent_diffusion,
     LatentDiffusionPipeline,
