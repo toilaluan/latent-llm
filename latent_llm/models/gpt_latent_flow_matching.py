@@ -21,7 +21,7 @@ class GPTLatentFlowMatching(nn.Module):
         lora_r: int = 16,
         lora_alpha: int = 32,
         lora_dropout: float = 0.05,
-        lora_target_modules: list = None,
+        lora_target_modules: list[str] = None,
     ):
         super().__init__()
         self.model_name = model_name

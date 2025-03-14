@@ -222,6 +222,21 @@ def parse_args():
         default=0.05,
         help="LoRA dropout",
     )
+
+    parser.add_argument(
+        "--lora_target_modules",
+        type=str,
+        default="q_proj,v_proj,k_proj,o_proj",
+        help="LoRA target modules",
+    )
+
+    parser.add_argument(
+        "--warmup_steps",
+        type=int,
+        default=100,
+        help="Number of warmup steps",
+    )
+
     return parser.parse_args()
 
 
@@ -285,13 +300,18 @@ def train_one_epoch(
         optimizer.zero_grad()  # Zero gradients once before the loop
         accumulated_loss = 0
 
-        for i in range(args.repeat_per_encode_pass):
+        if batch_idx < args.warmup_steps:
+            repeat_per_encode_pass = 1
+        else:
+            repeat_per_encode_pass = args.repeat_per_encode_pass
+
+        for i in range(repeat_per_encode_pass):
             timesteps = torch.randint(1, model.max_steps + 1, (batch_size,)).tolist()
 
             # Calculate flow matching loss
             loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
             # Scale loss by the number of accumulation steps to maintain effective learning rate
-            scaled_loss = loss / args.repeat_per_encode_pass
+            scaled_loss = loss / repeat_per_encode_pass
             scaled_loss.backward()  # Gradients will accumulate across iterations
 
             accumulated_loss += loss.item()
@@ -565,6 +585,7 @@ def main():
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
+        lora_target_modules=args.lora_target_modules.split(","),
     )
     flow_model.to(device)
 
