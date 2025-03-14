@@ -184,16 +184,16 @@ def main():
         total_loss, rec_loss, kl_loss, mem_embeds, input_ids, token_accuracy = (
             training_step(batch)
         )
-        mem_embeds_mean = mem_embeds.mean()
-        mem_embeds_std = mem_embeds.std()
+        mem_embeds_mean = mem_embeds.detach().mean()
+        mem_embeds_std = mem_embeds.detach().std()
         wandb.log(
             {
-                "train/total_loss": total_loss.item(),
-                "train/reconstruction_loss": rec_loss.item(),
-                "train/kl_loss": kl_loss.item(),
-                "train/token_accuracy": token_accuracy.item(),
-                "train/mem_embeds_mean": mem_embeds_mean.item(),
-                "train/mem_embeds_std": mem_embeds_std.item(),
+                "train/total_loss": total_loss.detach().item(),
+                "train/reconstruction_loss": rec_loss.detach().item(),
+                "train/kl_loss": kl_loss.detach().item(),
+                "train/token_accuracy": token_accuracy.detach().item(),
+                "train/mem_embeds_mean": mem_embeds_mean.detach().item(),
+                "train/mem_embeds_std": mem_embeds_std.detach().item(),
             }
         )
         accelerator.backward(total_loss)
@@ -204,10 +204,10 @@ def main():
 
         if current_step % args.log_interval == 0:
             logger.info(
-                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.item():.4f}; rec_loss: {rec_loss.item():.4f}; kl_loss: {kl_loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.detach().item():.4f}; rec_loss: {rec_loss.detach().item():.4f}; kl_loss: {kl_loss.detach().item():.4f}; token_accuracy: {token_accuracy.detach().item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
             logger.info(
-                f"mem_embeds_mean: {mem_embeds_mean.item():.4f}; mem_embeds_std: {mem_embeds_std.item():.4f}"
+                f"mem_embeds_mean: {mem_embeds_mean.detach().item():.4f}; mem_embeds_std: {mem_embeds_std.detach().item():.4f}"
             )
 
         if args.save_interval > 0 and current_step % args.save_interval == 0:
@@ -225,10 +225,10 @@ def main():
             logger.info("Generating...")
             ENCODER.eval()
             DECODER.eval()
-            mem_mean = mem_embeds.mean()
-            mem_std = mem_embeds.std()
+            mem_mean = mem_embeds.detach().mean()
+            mem_std = mem_embeds.detach().std()
             logger.info(
-                f"mem_mean: {mem_mean.item():.4f}; mem_std: {mem_std.item():.4f}"
+                f"mem_mean: {mem_mean.detach().item():.4f}; mem_std: {mem_std.detach().item():.4f}"
             )
             with torch.no_grad():
                 batch = next(iter(DATALOADER))
