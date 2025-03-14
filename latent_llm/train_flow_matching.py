@@ -306,9 +306,7 @@ def train_one_epoch(
 
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
-            suffix_latents, _, _ = encoder(
-                suffix_tokens, tokenizer.pad_token_id, include_ae_tokens=False
-            )
+            suffix_latents, _, _ = encoder(suffix_tokens, tokenizer.pad_token_id)
             suffix_latents = (suffix_latents - VAE_SHIFT) / VAE_SCALE
             vae_mean = suffix_latents.mean().item()
             vae_std = suffix_latents.std().item()
@@ -445,15 +443,10 @@ def evaluate(
             # Track latent statistics
             latent_means.append(predicted_latents.mean().item())
             latent_stds.append(predicted_latents.std().item())
-            embeds = torch.cat(
-                [
-                    predicted_latents,
-                    encoder.ae_tokens.repeat(B, 1, 1),
-                ],
-                dim=1,
-            )
             # Decode using the decoder
-            output_ids = decoder.generate(embeds, max_new_tokens=50, temperature=0.0)
+            output_ids = decoder.generate(
+                predicted_latents, max_new_tokens=50, temperature=0.0
+            )
 
         # Decode generated text
         generated_suffix = tokenizer.decode(output_ids[0], skip_special_tokens=True)
@@ -625,7 +618,6 @@ def main():
     decoder = LatentDecoder(
         model_name=decoder_id,
         n_gist_tokens=encoder_config["n_gist_tokens"],
-        n_ae_tokens=encoder_config["n_ae_tokens"],
         block_size=encoder_config["block_size"],
         torch_dtype=torch_dtype,
     )

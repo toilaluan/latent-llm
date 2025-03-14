@@ -22,7 +22,6 @@ class LatentEncoder(nn.Module):
         self,
         model_name: str,
         n_gist_tokens: int,
-        n_ae_tokens: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
         use_lora: bool = False,
@@ -67,13 +66,9 @@ class LatentEncoder(nn.Module):
             torch.zeros(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.n_gist_tokens = n_gist_tokens
-        self.ae_tokens = nn.Parameter(
-            torch.randn(n_ae_tokens, self.base_config.hidden_size, dtype=torch_dtype)
-        )
         self.block_size = block_size
         self.latent_config = {
             "n_gist_tokens": n_gist_tokens,
-            "n_ae_tokens": n_ae_tokens,
             "block_size": block_size,
         }
         self.kl_weight = kl_weight
@@ -98,14 +93,13 @@ class LatentEncoder(nn.Module):
 
     def get_trainable_parameters(self):
         if self.use_lora:
-            return [self.gist_tokens_mean, self.gist_tokens_logvar, self.ae_tokens] + [
+            return [self.gist_tokens_mean, self.gist_tokens_logvar] + [
                 p for p in self.model.parameters() if p.requires_grad
             ]
         else:
             return [
                 self.gist_tokens_mean,
                 self.gist_tokens_logvar,
-                self.ae_tokens,
                 *self.model.parameters(),
             ]
 
@@ -131,7 +125,7 @@ class LatentEncoder(nn.Module):
         )
 
     def forward(
-        self, input_ids: torch.Tensor, pad_token_id: int, include_ae_tokens: bool = True
+        self, input_ids: torch.Tensor, pad_token_id: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         print("orginal", input_ids.shape)
@@ -185,11 +179,7 @@ class LatentEncoder(nn.Module):
         # Sample latent vectors using reparameterization trick
         gisted_embeds = self.reparameterize(mean, logvar)
 
-        if include_ae_tokens:
-            ae_embeds = self.ae_tokens.repeat(B, 1, 1)
-            return torch.cat([gisted_embeds, ae_embeds], dim=1), kl_loss, mean
-        else:
-            return gisted_embeds, kl_loss, mean
+        return gisted_embeds, kl_loss, mean
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         if self.use_lora:
@@ -207,7 +197,6 @@ class LatentEncoder(nn.Module):
         tensors = {
             "gist_tokens_mean": self.gist_tokens_mean.data,
             "gist_tokens_logvar": self.gist_tokens_logvar.data,
-            "ae_tokens": self.ae_tokens.data,
         }
         save_path = f"{ckpt_dir}/{repo_id}/latent_tokens.safetensors"
         save_file(tensors, save_path)
@@ -215,7 +204,6 @@ class LatentEncoder(nn.Module):
         # Save configuration parameters
         config = {
             "n_gist_tokens": self.n_gist_tokens,
-            "n_ae_tokens": self.ae_tokens.size(0),
             "block_size": self.block_size,
             "use_lora": self.use_lora,
             "kl_weight": self.kl_weight,
@@ -270,7 +258,6 @@ class LatentEncoder(nn.Module):
         instance = cls(
             model_name=model_name,
             n_gist_tokens=config["n_gist_tokens"],
-            n_ae_tokens=config["n_ae_tokens"],
             block_size=config["block_size"],
             torch_dtype=torch_dtype,
             use_lora=False,  # Default to False if not specified
@@ -306,7 +293,6 @@ class LatentEncoder(nn.Module):
                     self.gist_tokens_mean.data
                 )
 
-            self.ae_tokens.data = tensors["ae_tokens"]
             print(f"Loaded latent tokens from {tokens_path}")
         else:
             raise ValueError(f"Could not find latent_tokens.safetensors in {repo_id}")
@@ -317,7 +303,6 @@ class LatentDecoder(nn.Module):
         self,
         model_name: str,
         n_gist_tokens: int,
-        n_ae_tokens: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
     ):
@@ -326,7 +311,7 @@ class LatentDecoder(nn.Module):
             model_name, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
         )
         self.base_config = self.model.config
-        self.mem_size = n_gist_tokens + n_ae_tokens
+        self.mem_size = n_gist_tokens
         self.block_size = block_size
         self.init_position_ids()
 
@@ -511,7 +496,6 @@ class GPTLatentVAEPipeline:
             self.decoder = LatentDecoder(
                 model_name=model_name,
                 n_gist_tokens=config["n_gist_tokens"],
-                n_ae_tokens=config["n_ae_tokens"],
                 block_size=config["block_size"],
                 torch_dtype=self.torch_dtype,
             )
@@ -593,10 +577,9 @@ class GPTLatentVAEPipeline:
 if __name__ == "__main__":
     model_name = "HuggingFaceTB/SmolLM2-135M"
     n_gist_tokens = 64
-    n_ae_tokens = 1
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    latent_encoder = LatentEncoder(model_name, n_gist_tokens, n_ae_tokens)
-    latent_decoder = LatentDecoder(model_name, n_gist_tokens, n_ae_tokens)
+    latent_encoder = LatentEncoder(model_name, n_gist_tokens)
+    latent_decoder = LatentDecoder(model_name, n_gist_tokens)
 
     input_ids = torch.randint(0, 100, (1, 10))
     mem_embeds, mean = latent_encoder(input_ids)

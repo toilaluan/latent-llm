@@ -451,7 +451,6 @@ class GPTLatentFlowMatchingPipeline:
             self.decoder = LatentDecoder(
                 model_name=decoder_model_id,
                 n_gist_tokens=self.config["n_gist_tokens"],
-                n_ae_tokens=self.config["n_ae_tokens"],
                 block_size=self.config["block_size"],
                 torch_dtype=torch_dtype,
             )
@@ -460,7 +459,6 @@ class GPTLatentFlowMatchingPipeline:
             self.decoder = LatentDecoder(
                 model_name=decoder_model_id,
                 n_gist_tokens=self.config["n_gist_tokens"],
-                n_ae_tokens=self.config["n_ae_tokens"],
                 block_size=self.config["block_size"],
                 torch_dtype=torch_dtype,
             )

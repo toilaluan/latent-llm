@@ -38,7 +38,6 @@ def parse_args():
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--n_gist_tokens", type=int, default=256)
-    parser.add_argument("--n_ae_tokens", type=int, default=1)
     parser.add_argument(
         "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
     )
@@ -103,10 +102,9 @@ def main():
     print("---")
 
     ENCODER = LatentEncoder(
-        args.model_name,
-        args.n_gist_tokens,
-        args.n_ae_tokens,
-        args.block_size,
+        model_name=args.model_name,
+        n_gist_tokens=args.n_gist_tokens,
+        block_size=args.block_size,
         use_lora=args.use_lora,
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
@@ -116,7 +114,9 @@ def main():
         ),
     )
     DECODER = LatentDecoder(
-        args.model_name, args.n_gist_tokens, args.n_ae_tokens, args.block_size
+        model_name=args.model_name,
+        n_gist_tokens=args.n_gist_tokens,
+        block_size=args.block_size,
     )
 
     TOKENIZER = AutoTokenizer.from_pretrained(args.model_name)
@@ -249,8 +249,8 @@ def main():
             logger.info("Generating...")
             ENCODER.eval()
             DECODER.eval()
-            mem_mean = mem_embeds.mean()
-            mem_std = mem_embeds.std()
+            mem_mean = mem_embeds[:, : ENCODER.n_gist_tokens, :].mean()
+            mem_std = mem_embeds[:, : ENCODER.n_gist_tokens, :].std()
             logger.info(
                 f"mem_mean: {mem_mean.item():.4f}; mem_std: {mem_std.item():.4f}"
             )
