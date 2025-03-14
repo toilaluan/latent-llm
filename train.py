@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import torch
-from latent_llm.data.text_dataset import TextDataset, RandomTextDataset
+from latent_llm.data.text_dataset import TextDataset
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Training script for latent LLM.")
-    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM2-135M")
-    parser.add_argument("--dataset_type", type=str, default="text")
+    parser.add_argument("--model_name", type=str, default="")
     parser.add_argument(
         "--dataset_id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
     )
@@ -41,7 +40,7 @@ def parse_args():
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--n_gist_tokens", type=int, default=256)
     parser.add_argument(
-        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
+        "--hub_repo_id", type=str, default=""
     )
     parser.add_argument("--learning_rate", type=float, default=2.5e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
@@ -96,18 +95,13 @@ def main():
     TOKENIZER.push_to_hub(args.hub_repo_id + "-encoder")
     logger.info(f"pad_token: {TOKENIZER.pad_token}: {TOKENIZER.pad_token_id}")
     logger.info(f"eos_token: {TOKENIZER.eos_token}: {TOKENIZER.eos_token_id}")
-    if args.dataset_type == "text":
-        DATASET = TextDataset(
-            dataset_id=args.dataset_id,
-            split=args.split,
-            block_size=args.block_size,
-            model_name=args.model_name,
-        )
-    else:
-        DATASET = RandomTextDataset(
-            model_name=args.model_name,
-            block_size=args.block_size,
-        )
+    DATASET = TextDataset(
+        dataset_id=args.dataset_id,
+        split=args.split,
+        block_size=args.block_size,
+        model_name=args.model_name,
+    )
+
     logger.info(f"sample: {DATASET[0]}")
     DATALOADER = DataLoader(
         DATASET,
