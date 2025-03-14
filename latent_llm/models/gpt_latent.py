@@ -118,22 +118,30 @@ class LatentEncoder(nn.Module):
         Input shapes: (batch_size, n_gist_tokens, hidden_size)
         Output shape: scalar (averaged over batch, summed over latent dimensions)
         """
-        # Sum over latent dimensions (n_gist_tokens * hidden_size)
-        # and average over batch
-        return -0.5 * torch.mean(
-            torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=[1, 2])
+        # Reshape to combine n_gist_tokens and hidden_size dimensions for proper summing
+        batch_size = mean.size(0)
+        reshaped_mean = mean.reshape(batch_size, -1)
+        reshaped_logvar = logvar.reshape(batch_size, -1)
+
+        # Calculate KL divergence components
+        kl_per_batch = (
+            1 + reshaped_logvar - reshaped_mean.pow(2) - reshaped_logvar.exp()
         )
+        # Sum over latent dimensions and average over batch
+        return -0.5 * torch.mean(torch.sum(kl_per_batch, dim=1))
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         embeds = self.model.get_input_embeddings()(input_ids)
-        position_ids = self.position_ids.repeat(B, 1)
-        masks = input_ids != pad_token_id
+        position_ids = self.position_ids[: embeds.size(1) + self.n_gist_tokens].repeat(
+            B, 1
+        )
+        masks = (input_ids != pad_token_id).to(dtype=torch.int64)
 
         # Use gist_tokens_mean as initial tokens for model processing
-        gist_tokens = self.gist_tokens_mean.repeat(B, 1, 1)
+        gist_tokens = self.gist_tokens_mean.unsqueeze(0).expand(B, -1, -1)
 
         embeds = torch.cat(
             [
@@ -142,9 +150,11 @@ class LatentEncoder(nn.Module):
             ],
             dim=1,
         )
-        masks = torch.cat(
-            [masks, torch.ones(B, self.n_gist_tokens, device=masks.device)], dim=1
+        gist_masks = torch.ones(
+            B, self.n_gist_tokens, device=masks.device, dtype=torch.int64
         )
+        masks = torch.cat([masks, gist_masks], dim=1)
+
         last_hidden_states = self.model(
             inputs_embeds=embeds,
             output_hidden_states=True,
@@ -157,7 +167,7 @@ class LatentEncoder(nn.Module):
 
         # For VAE, we interpret these as parameters of the distribution
         mean = gisted_hidden
-        logvar = self.gist_tokens_logvar.repeat(B, 1, 1)
+        logvar = self.gist_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
 
         # Calculate KL divergence
         kl_loss = self.kl_divergence(mean, logvar) * self.kl_weight
@@ -367,7 +377,7 @@ class LatentDecoder(nn.Module):
         """Generate text using a more efficient approach with temperature sampling."""
         embeds = embeds.to(self.model.dtype)
         B = embeds.size(0)
-        device = self.model.device
+        device = embeds.device
         generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
         # Create attention mask (1 for all tokens)
         attention_mask = torch.ones(
@@ -376,6 +386,7 @@ class LatentDecoder(nn.Module):
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
         max_new_tokens = min(max_new_tokens, self.position_ids.size(0) - embeds.size(1))
         print("max_new_tokens", max_new_tokens)
+
         # Generate tokens one by one
         for _ in range(max_new_tokens):
             # Forward pass
@@ -384,35 +395,34 @@ class LatentDecoder(nn.Module):
                 attention_mask=attention_mask,
                 # position_ids=position_ids,
             )
-            logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
+            logits = outputs.logits[:, -1, :]
+            # Apply temperature scaling
+            scaled_logits = logits / max(temperature, 1e-7)
 
             # Sample from the distribution
             if temperature > 0:
-                probs = torch.softmax(logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1).squeeze(-1)
+                probs = torch.softmax(scaled_logits, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
             else:
-                next_token = torch.argmax(logits, dim=-1)
+                next_token = torch.argmax(scaled_logits, dim=-1, keepdim=True)
 
-            # Stop if all sequences have EOS
+            # Check if all sequences have EOS
             if (next_token == self.model.config.eos_token_id).all():
                 break
 
-            # Append new tokens - handle both empty and non-empty cases
-            next_token = next_token.unsqueeze(-1)
+            # Append new tokens
             if generated_ids.size(1) == 0:
                 generated_ids = next_token
             else:
-                generated_ids = torch.cat([generated_ids, next_token], dim=-1)
+                generated_ids = torch.cat([generated_ids, next_token], dim=1)
 
             # Update input embeddings for next iteration
             next_token_embeds = self.model.get_input_embeddings()(next_token)
             embeds = torch.cat([embeds, next_token_embeds], dim=1)
 
             # Update attention mask
-            attention_mask = torch.cat(
-                [attention_mask, torch.ones((B, 1), dtype=torch.long, device=device)],
-                dim=1,
-            )
+            new_mask = torch.ones((B, 1), dtype=torch.long, device=device)
+            attention_mask = torch.cat([attention_mask, new_mask], dim=1)
             position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
 
         return generated_ids

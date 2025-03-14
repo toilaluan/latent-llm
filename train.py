@@ -11,6 +11,7 @@ from accelerate import Accelerator
 import time
 import argparse
 
+torch.set_float32_matmul_precision("high")
 accelerator = Accelerator(mixed_precision="bf16")
 
 
