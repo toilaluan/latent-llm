@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
-    parser.add_argument("--limit", type=int, default=-1)
+    parser.add_argument("--kl_weight", type=float, default=1e-4)
     return parser.parse_args()
 
 
@@ -81,6 +81,7 @@ def main():
         model_name=args.model_name,
         n_gist_tokens=args.n_gist_tokens,
         block_size=args.block_size,
+        kl_weight=args.kl_weight,
     )
     DECODER = LatentDecoder(
         model_name=args.model_name,
