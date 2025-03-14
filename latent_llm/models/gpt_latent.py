@@ -395,9 +395,7 @@ class LatentDecoder(nn.Module):
             (B, embeds.size(1)), dtype=torch.long, device=device
         )
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        max_new_tokens = min(
-            max_new_tokens, self.init_position_ids.size(0) - embeds.size(1)
-        )
+        max_new_tokens = min(max_new_tokens, self.position_ids.size(0) - embeds.size(1))
         # Generate tokens one by one
         for _ in range(max_new_tokens):
             # Forward pass
