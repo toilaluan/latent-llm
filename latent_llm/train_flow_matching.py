@@ -182,6 +182,12 @@ def parse_args():
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed for reproducibility"
     )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="bfloat16",
+        help="Data type for model parameters",
+    )
 
     return parser.parse_args()
 
@@ -458,7 +464,7 @@ def main():
     torch.manual_seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
-
+    torch_dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float32
     # Initialize wandb
     if args.use_wandb:
         wandb.init(
@@ -472,7 +478,9 @@ def main():
 
     # Load encoder model
     print(f"Loading encoder model {args.encoder_id}...")
-    encoder = LatentEncoder.from_pretrained(args.encoder_id, device=device)
+    encoder = LatentEncoder.from_pretrained(
+        args.encoder_id, device=device, torch_dtype=torch_dtype
+    )
     encoder.eval()  # We don't train the encoder, only use it to generate latents
 
     # Load decoder model (for evaluation)
@@ -487,6 +495,7 @@ def main():
         n_gist_tokens=encoder_config["n_gist_tokens"],
         n_ae_tokens=encoder_config["n_ae_tokens"],
         block_size=encoder_config["block_size"],
+        torch_dtype=torch_dtype,
     )
     decoder.to(device)
     decoder.eval()
@@ -498,6 +507,7 @@ def main():
         n_gist_tokens=encoder_config["n_gist_tokens"],
         block_size=encoder_config["block_size"],
         device=device,
+        torch_dtype=torch_dtype,
     )
     flow_model.to(device)
 
