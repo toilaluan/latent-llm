@@ -26,12 +26,6 @@ def parse_args():
         help="HuggingFace model ID for the decoder",
     )
     parser.add_argument(
-        "--base_model_id",
-        type=str,
-        default="HuggingFaceTB/SmolLM2-135M",
-        help="Base model ID",
-    )
-    parser.add_argument(
         "--max_new_tokens",
         type=int,
         default=512,
