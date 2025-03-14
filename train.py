@@ -124,7 +124,7 @@ def main():
     TOKENIZER.add_special_tokens({"pad_token": "<|pad|>"})
     TOKENIZER.push_to_hub(args.hub_repo_id + "-encoder")
     logger.info(f"pad_token: {TOKENIZER.pad_token}")
-
+    logger.info(f"eos_token: {TOKENIZER.eos_token}")
     if args.dataset_type == "text":
         DATASET = TextDataset(
             dataset_id=args.dataset_id,
@@ -137,7 +137,7 @@ def main():
             model_name=args.model_name,
             block_size=args.block_size,
         )
-
+    logger.info(f"sample: {DATASET[0]}")
     DATALOADER = DataLoader(
         DATASET,
         batch_size=args.batch_size,
