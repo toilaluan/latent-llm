@@ -30,6 +30,7 @@ class LatentEncoder(nn.Module):
         lora_alpha: int = 16,
         lora_dropout: float = 0.05,
         lora_target_modules: Optional[list] = None,
+        kl_weight: float = 0.1,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -58,8 +59,12 @@ class LatentEncoder(nn.Module):
             self.model = get_peft_model(self.model, lora_config)
             self.model.print_trainable_parameters()
 
-        self.gist_tokens = nn.Parameter(
+        # For VAE, we need separate parameters for mean and log variance
+        self.gist_tokens_mean = nn.Parameter(
             torch.randn(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
+        )
+        self.gist_tokens_logvar = nn.Parameter(
+            torch.zeros(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.n_gist_tokens = n_gist_tokens
         self.ae_tokens = nn.Parameter(
@@ -71,6 +76,7 @@ class LatentEncoder(nn.Module):
             "n_ae_tokens": n_ae_tokens,
             "block_size": block_size,
         }
+        self.kl_weight = kl_weight
         self.init_weights()
         self.init_position_ids()
 
@@ -87,19 +93,40 @@ class LatentEncoder(nn.Module):
         self.register_buffer("position_ids", position_ids)
 
     def init_weights(self):
-        torch.nn.init.kaiming_normal_(self.gist_tokens)
+        torch.nn.init.kaiming_normal_(self.gist_tokens_mean)
+        torch.nn.init.zeros_(self.gist_tokens_logvar)
 
     def get_trainable_parameters(self):
         if self.use_lora:
-            return [self.gist_tokens, self.ae_tokens] + [
+            return [self.gist_tokens_mean, self.gist_tokens_logvar, self.ae_tokens] + [
                 p for p in self.model.parameters() if p.requires_grad
             ]
         else:
-            return [self.gist_tokens, self.ae_tokens, *self.model.parameters()]
+            return [
+                self.gist_tokens_mean,
+                self.gist_tokens_logvar,
+                self.ae_tokens,
+                *self.model.parameters(),
+            ]
+
+    def reparameterize(self, mean, logvar):
+        """
+        Reparameterization trick: sample from a standard normal and scale by
+        standard deviation and shift by mean for backpropagation.
+        """
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mean + eps * std
+
+    def kl_divergence(self, mean, logvar):
+        """
+        Compute KL divergence between the latent distribution and standard normal
+        """
+        return -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int, include_ae_tokens: bool = True
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         if input_ids.size(1) < self.block_size:
             input_ids = torch.cat(
@@ -116,10 +143,14 @@ class LatentEncoder(nn.Module):
         embeds = self.model.get_input_embeddings()(input_ids)
         position_ids = self.position_ids.repeat(B, 1)
         masks = input_ids != pad_token_id
+
+        # Use gist_tokens_mean as initial tokens for model processing
+        gist_tokens = self.gist_tokens_mean.repeat(B, 1, 1)
+
         embeds = torch.cat(
             [
                 embeds,
-                self.gist_tokens.repeat(B, 1, 1),
+                gist_tokens,
             ],
             dim=1,
         )
@@ -132,12 +163,25 @@ class LatentEncoder(nn.Module):
             attention_mask=masks,
             position_ids=position_ids,
         ).hidden_states[-1]
-        gisted_embeds = last_hidden_states[:, -self.n_gist_tokens :, :]
+
+        # Get the hidden states for gist tokens
+        gisted_hidden = last_hidden_states[:, -self.n_gist_tokens :, :]
+
+        # For VAE, we interpret these as parameters of the distribution
+        mean = gisted_hidden
+        logvar = self.gist_tokens_logvar.repeat(B, 1, 1)
+
+        # Calculate KL divergence
+        kl_loss = self.kl_divergence(mean, logvar) * self.kl_weight
+
+        # Sample latent vectors using reparameterization trick
+        gisted_embeds = self.reparameterize(mean, logvar)
+
         if include_ae_tokens:
             ae_embeds = self.ae_tokens.repeat(B, 1, 1)
-            return torch.cat([gisted_embeds, ae_embeds], dim=1)
+            return torch.cat([gisted_embeds, ae_embeds], dim=1), kl_loss, mean
         else:
-            return gisted_embeds
+            return gisted_embeds, kl_loss, mean
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         if self.use_lora:
@@ -153,7 +197,8 @@ class LatentEncoder(nn.Module):
 
         # Save tensors using safetensors
         tensors = {
-            "gist_tokens": self.gist_tokens.data,
+            "gist_tokens_mean": self.gist_tokens_mean.data,
+            "gist_tokens_logvar": self.gist_tokens_logvar.data,
             "ae_tokens": self.ae_tokens.data,
         }
         save_path = f"{ckpt_dir}/{repo_id}/latent_tokens.safetensors"
@@ -165,6 +210,7 @@ class LatentEncoder(nn.Module):
             "n_ae_tokens": self.ae_tokens.size(0),
             "block_size": self.block_size,
             "use_lora": self.use_lora,
+            "kl_weight": self.kl_weight,
         }
         import json
 
@@ -211,6 +257,8 @@ class LatentEncoder(nn.Module):
         model_name = repo_id
 
         # Create instance with loaded config
+        kl_weight = config.get("kl_weight", 0.1)  # Default if not found in older models
+
         instance = cls(
             model_name=model_name,
             n_gist_tokens=config["n_gist_tokens"],
@@ -218,6 +266,7 @@ class LatentEncoder(nn.Module):
             block_size=config["block_size"],
             torch_dtype=torch_dtype,
             use_lora=False,  # Default to False if not specified
+            kl_weight=kl_weight,
         )
 
         # Load weights
@@ -237,7 +286,18 @@ class LatentEncoder(nn.Module):
         # Load tensors using safetensors
         if os.path.exists(tokens_path):
             tensors = load_file(tokens_path)
-            self.gist_tokens.data = tensors["gist_tokens"]
+            if "gist_tokens_mean" in tensors:
+                # New VAE format
+                self.gist_tokens_mean.data = tensors["gist_tokens_mean"]
+                self.gist_tokens_logvar.data = tensors["gist_tokens_logvar"]
+            else:
+                # Backward compatibility with older non-VAE format
+                self.gist_tokens_mean.data = tensors["gist_tokens"]
+                # Initialize logvar with zeros
+                self.gist_tokens_logvar.data = torch.zeros_like(
+                    self.gist_tokens_mean.data
+                )
+
             self.ae_tokens.data = tensors["ae_tokens"]
             print(f"Loaded latent tokens from {tokens_path}")
         else:
@@ -449,7 +509,7 @@ class GPTLatentVAEPipeline:
             self.decoder.eval()
             self.decoder.to(self.device)
 
-    def encode(self, text: str) -> torch.Tensor:
+    def encode(self, text: str) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Encode text to latent embeddings.
 
@@ -457,7 +517,7 @@ class GPTLatentVAEPipeline:
             text: Input text to encode
 
         Returns:
-            Memory embeddings tensor
+            Memory embeddings tensor and mean tensor
         """
         if not self.pretrained_encoder_id:
             raise ValueError("Encoder model ID not provided during initialization")
@@ -476,9 +536,9 @@ class GPTLatentVAEPipeline:
 
         # Generate memory embeddings
         with torch.no_grad():
-            mem_embeds = self.encoder(input_ids, self.tokenizer.pad_token_id)
+            mem_embeds, _, mean = self.encoder(input_ids, self.tokenizer.pad_token_id)
 
-        return mem_embeds
+        return mem_embeds, mean
 
     def decode(
         self,
@@ -530,10 +590,9 @@ if __name__ == "__main__":
     latent_decoder = LatentDecoder(model_name, n_gist_tokens, n_ae_tokens)
 
     input_ids = torch.randint(0, 100, (1, 10))
-    mem_embeds = latent_encoder(input_ids)
-    logits, loss, accuracy = latent_decoder(input_ids, mem_embeds, labels=input_ids)
+    mem_embeds, mean = latent_encoder(input_ids)
+    logits, loss, _ = latent_decoder(input_ids, mem_embeds, labels=input_ids)
     print(loss)
-    print(accuracy)
 
     completion = latent_decoder.generate(mem_embeds, input_ids, max_new_tokens=10)
     print(tokenizer.decode(completion[0]))

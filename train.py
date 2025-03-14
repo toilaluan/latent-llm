@@ -148,11 +148,13 @@ def main():
     def training_step(batch: torch.Tensor) -> torch.Tensor:
         input_ids = batch.to(accelerator.device)
         labels = batch.to(accelerator.device)
-        mem_embeds = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
+        mem_embeds, kl_loss, _ = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
         logits, loss, token_accuracy = DECODER(
             input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
-        return loss, mem_embeds, input_ids, token_accuracy
+        # Combine reconstruction loss with KL divergence loss
+        total_loss = loss + kl_loss
+        return total_loss, loss, kl_loss, mem_embeds, input_ids, token_accuracy
 
     def count_parameters(model):
         total_params = sum(p.numel() for p in model.parameters())
@@ -207,17 +209,25 @@ def main():
 
     for batch in DATALOADER:
         OPTIMIZER.zero_grad()
-        loss, mem_embeds, input_ids, token_accuracy = training_step(batch)
-        wandb.log({"train/loss": loss.item()})
-        wandb.log({"train/token_accuracy": token_accuracy.item()})
-        accelerator.backward(loss)
+        total_loss, rec_loss, kl_loss, mem_embeds, input_ids, token_accuracy = (
+            training_step(batch)
+        )
+        wandb.log(
+            {
+                "train/total_loss": total_loss.item(),
+                "train/reconstruction_loss": rec_loss.item(),
+                "train/kl_loss": kl_loss.item(),
+                "train/token_accuracy": token_accuracy.item(),
+            }
+        )
+        accelerator.backward(total_loss)
         OPTIMIZER.step()
         PROCESSED_TOKENS += args.block_size * args.batch_size
         TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
 
         if current_step % args.log_interval == 0:
             logger.info(
-                f"[{current_step}/{args.training_steps}] loss: {loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.item():.4f}; rec_loss: {rec_loss.item():.4f}; kl_loss: {kl_loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
 
         if args.save_interval > 0 and current_step % args.save_interval == 0:
