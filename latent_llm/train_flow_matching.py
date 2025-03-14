@@ -52,45 +52,49 @@ class TextCompletionDataset(Dataset):
         # Get text from dataset
         text = self.dataset[idx]["text"]
 
-        # Tokenize the full text
-        tokens = self.tokenizer(
-            text,
+        # Calculate approximate character length for splitting
+        approx_char_count = len(text)
+
+        # Determine split point based on character count
+        max_char_prefix = int(approx_char_count * self.max_prefix_ratio)
+
+        # Split text into prefix and suffix at character level
+        if max_char_prefix < approx_char_count:
+            # Random split point between min_prefix_length chars and max_ratio
+            # Using character approximation for min_prefix_length (assuming ~4 chars per token)
+            min_char_prefix = min(self.min_prefix_length * 4, max_char_prefix)
+            if max_char_prefix > min_char_prefix:
+                split_point = random.randint(min_char_prefix, max_char_prefix)
+            else:
+                split_point = min_char_prefix
+
+            prefix_text = text[:split_point]
+            suffix_text = text[split_point:]
+        else:
+            # If text is too short, use most of it as prefix
+            prefix_text = text[:max_char_prefix]
+            suffix_text = text[max_char_prefix:]
+
+        # Now tokenize the prefix and suffix separately
+        prefix_tokens = self.tokenizer(
+            prefix_text,
             truncation=True,
             max_length=self.block_size,
+            padding="max_length",
             return_tensors="pt",
         ).input_ids[0]
 
-        # Calculate text length (excluding padding)
-        text_length = tokens.size(0)
-
-        # Determine split point (how much prefix vs suffix)
-        max_prefix_length = min(
-            int(text_length * self.max_prefix_ratio), text_length - 1
-        )
-        min_prefix_length = min(self.min_prefix_length, max_prefix_length)
-
-        # Randomly select prefix length
-        if max_prefix_length > min_prefix_length:
-            prefix_length = random.randint(min_prefix_length, max_prefix_length)
-        else:
-            prefix_length = min_prefix_length
-
-        # Split into prefix and suffix
-        prefix_tokens = tokens[:prefix_length]
-        suffix_tokens = tokens[prefix_length:]
-
-        # Pad prefix to full context length
-        prefix_padding = torch.full(
-            (self.block_size - prefix_tokens.size(0),),
-            self.tokenizer.pad_token_id,
-            dtype=torch.long,
-        )
-        prefix_tokens = torch.cat([prefix_tokens, prefix_padding])
+        suffix_tokens = self.tokenizer(
+            suffix_text,
+            truncation=True,
+            max_length=self.block_size,
+            padding="max_length",
+            return_tensors="pt",
+        ).input_ids[0]
 
         return {
             "prefix": prefix_tokens,
             "suffix": suffix_tokens,
-            "prefix_length": prefix_length,
         }
 
 
@@ -258,21 +262,11 @@ def collate_fn(batch):
     Custom collate function for batching examples.
     """
     prefixes = torch.stack([item["prefix"] for item in batch])
-
-    # Suffix lengths may vary, so we need to pad them
-    max_suffix_len = max([item["suffix"].size(0) for item in batch])
-    suffix_tensor = torch.zeros(len(batch), max_suffix_len, dtype=torch.long)
-
-    for i, item in enumerate(batch):
-        suffix = item["suffix"]
-        suffix_tensor[i, : suffix.size(0)] = suffix
-
-    prefix_lengths = torch.tensor([item["prefix_length"] for item in batch])
+    suffixes = torch.stack([item["suffix"] for item in batch])
 
     return {
         "prefix": prefixes,
-        "suffix": suffix_tensor,
-        "prefix_length": prefix_lengths,
+        "suffix": suffixes,
     }
 
 
