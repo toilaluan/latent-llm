@@ -121,11 +121,11 @@ class GPTLatentFlowMatching(nn.Module):
 
         print("sigmas", sigmas.shape)
         print("latents", latents.shape)
-        print("noise", noise.shape)
 
         # Sample noise
         noise = torch.randn_like(latents, device=self.device)
 
+        print("noise", noise.shape)
         # Interpolate between source and target
         noised_latents = (1.0 - sigmas) * latents + sigmas * noise
 
