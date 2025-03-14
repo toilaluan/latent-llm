@@ -505,7 +505,7 @@ def evaluate(
                 "eval/latent_mean": np.mean(latent_means),
                 "eval/latent_std": np.mean(latent_stds),
                 "eval/latent_distribution": wandb.Histogram(
-                    predicted_latents.cpu().numpy()
+                    predicted_latents.float().cpu().numpy()
                 ),
             }
         )
