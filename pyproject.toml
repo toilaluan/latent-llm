@@ -9,6 +9,7 @@ dependencies = [
     "datasets>=3.3.2",
     "diffusers>=0.32.2",
     "einops>=0.8.1",
+    "hf-transfer",
     "mnemonic>=0.21",
     "nltk>=3.9.1",
     "numpy>=2.2.3",
