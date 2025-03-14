@@ -135,8 +135,8 @@ def main():
     ENCODER.train()
     DECODER.train()
 
-    # ENCODER.forward = torch.compile(ENCODER.forward)
-    # DECODER.forward = torch.compile(DECODER.forward)
+    ENCODER.forward = torch.compile(ENCODER.forward)
+    DECODER.forward = torch.compile(DECODER.forward)
 
     # Log the number of parameters
     encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
