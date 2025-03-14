@@ -222,8 +222,8 @@ class GPTLatentFlowMatching(nn.Module):
                     timesteps=timesteps,
                 )
 
-            # Update using Euler method
-            current_latent = current_latent + step_size * vector_field
+            # Update using Euler method (negative sign for correct flow direction)
+            current_latent = current_latent - step_size * vector_field
 
         return current_latent
 
