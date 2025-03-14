@@ -7,6 +7,7 @@ from tqdm import tqdm
 import wandb
 import random
 import numpy as np
+import pandas as pd
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
@@ -363,10 +364,13 @@ def evaluate(
                 }
             )
 
+        # Convert to pandas DataFrame
+        examples_df = pd.DataFrame(examples)
+
         wandb.log(
             {
                 "examples": wandb.Table(
-                    dataframe=examples,
+                    dataframe=examples_df,
                     columns=["prefix", "true_suffix", "generated_suffix"],
                 ),
                 "eval/epoch": epoch,
