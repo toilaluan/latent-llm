@@ -121,8 +121,14 @@ class LatentEncoder(nn.Module):
     def kl_divergence(self, mean, logvar):
         """
         Compute KL divergence between the latent distribution and standard normal
+        Input shapes: (batch_size, n_gist_tokens, hidden_size)
+        Output shape: scalar (averaged over batch, summed over latent dimensions)
         """
-        return -0.5 * torch.sum(1 + logvar - mean.pow(2) - logvar.exp())
+        # Sum over latent dimensions (n_gist_tokens * hidden_size)
+        # and average over batch
+        return -0.5 * torch.mean(
+            torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=[1, 2])
+        )
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int, include_ae_tokens: bool = True
