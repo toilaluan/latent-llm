@@ -166,6 +166,9 @@ def main():
     ENCODER.train()
     DECODER.train()
 
+    ENCODER = torch.compile(ENCODER)
+    DECODER = torch.compile(DECODER)
+
     if args.freeze_decoder:
         for param in DECODER.parameters():
             param.requires_grad = False
