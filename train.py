@@ -123,8 +123,8 @@ def main():
     # Add new pad token
     TOKENIZER.add_special_tokens({"pad_token": "<|pad|>"})
     TOKENIZER.push_to_hub(args.hub_repo_id + "-encoder")
-    logger.info(f"pad_token: {TOKENIZER.pad_token}")
-    logger.info(f"eos_token: {TOKENIZER.eos_token}")
+    logger.info(f"pad_token: {TOKENIZER.pad_token}: {TOKENIZER.pad_token_id}")
+    logger.info(f"eos_token: {TOKENIZER.eos_token}: {TOKENIZER.eos_token_id}")
     if args.dataset_type == "text":
         DATASET = TextDataset(
             dataset_id=args.dataset_id,
