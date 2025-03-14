@@ -245,6 +245,11 @@ def main():
             logger.info("Generating...")
             ENCODER.eval()
             DECODER.eval()
+            mem_mean = mem_embeds.mean()
+            mem_std = mem_embeds.std()
+            logger.info(
+                f"mem_mean: {mem_mean.item():.4f}; mem_std: {mem_std.item():.4f}"
+            )
             with torch.no_grad():
                 batch = next(iter(DATALOADER))
                 generated_ids = DECODER.generate(
