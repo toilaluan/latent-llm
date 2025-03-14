@@ -196,6 +196,33 @@ def parse_args():
         help="Number of times to sample different timesteps per encoded batch",
     )
 
+    parser.add_argument(
+        "--use_lora",
+        type=bool,
+        default=False,
+        help="Whether to use LoRA for training",
+    )
+
+    parser.add_argument(
+        "--lora_r",
+        type=int,
+        default=128,
+        help="LoRA rank",
+    )
+
+    parser.add_argument(
+        "--lora_alpha",
+        type=int,
+        default=256,
+        help="LoRA alpha",
+    )
+
+    parser.add_argument(
+        "--lora_dropout",
+        type=float,
+        default=0.05,
+        help="LoRA dropout",
+    )
     return parser.parse_args()
 
 
@@ -535,6 +562,10 @@ def main():
         block_size=encoder_config["block_size"],
         device=device,
         torch_dtype=torch_dtype,
+        use_lora=args.use_lora,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
     )
     flow_model.to(device)
 
@@ -561,7 +592,9 @@ def main():
     )
 
     # Create optimizer
-    optimizer = torch.optim.AdamW(flow_model.parameters(), lr=args.learning_rate)
+    optimizer = torch.optim.AdamW(
+        [p for p in flow_model.parameters() if p.requires_grad], lr=args.learning_rate
+    )
 
     # Create save directory
     os.makedirs(args.save_path, exist_ok=True)

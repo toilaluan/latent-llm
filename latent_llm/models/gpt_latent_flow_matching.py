@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 from huggingface_hub import snapshot_download
+from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 
 
 class GPTLatentFlowMatching(nn.Module):
@@ -16,6 +17,11 @@ class GPTLatentFlowMatching(nn.Module):
         timestep_token_size: int = 4,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
+        use_lora: bool = False,
+        lora_r: int = 16,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.05,
+        lora_target_modules: list = None,
     ):
         super().__init__()
         self.model_name = model_name
@@ -25,11 +31,30 @@ class GPTLatentFlowMatching(nn.Module):
         self.timestep_token_size = timestep_token_size
         self.torch_dtype = torch_dtype
         self.device = device
+        self.use_lora = use_lora
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name, torch_dtype=torch_dtype
         )
+
+        # Apply LoRA if requested
+        if use_lora:
+            if lora_target_modules is None:
+                # Default target modules for typical transformer models
+                lora_target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
+
+            lora_config = LoraConfig(
+                task_type=TaskType.CAUSAL_LM,
+                r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=lora_target_modules,
+                bias="none",
+            )
+            self.model = get_peft_model(self.model, lora_config)
+            self.model.print_trainable_parameters()
+
         self.base_config = self.model.config
         self.timestep_embeddings = nn.Embedding(
             num_embeddings=max_steps * timestep_token_size,
@@ -202,6 +227,92 @@ class GPTLatentFlowMatching(nn.Module):
 
         return current_latent
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_path: str,
+        base_model_name: str,
+        n_gist_tokens: int,
+        block_size: int,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: str = "cuda",
+        use_lora: bool = True,
+    ):
+        """
+        Load a pretrained model with LoRA weights.
+
+        Args:
+            model_path: Path to the saved model weights
+            base_model_name: Name of the base model
+            n_gist_tokens: Number of gist tokens
+            block_size: Block size for the model
+            torch_dtype: Data type for model parameters
+            device: Device to load the model on
+            use_lora: Whether the saved model uses LoRA
+
+        Returns:
+            Loaded model instance
+        """
+        # Initialize with base model
+        model = cls(
+            model_name=base_model_name,
+            n_gist_tokens=n_gist_tokens,
+            block_size=block_size,
+            torch_dtype=torch_dtype,
+            device=device,
+            use_lora=use_lora,
+        )
+
+        # Load the saved weights
+        if use_lora:
+            # For LoRA models, we load the base model first, then the adapter
+            if os.path.isdir(model_path):
+                # Load from local path
+                model.model = PeftModel.from_pretrained(
+                    model.model, model_path, is_trainable=True
+                )
+            else:
+                # Load from HuggingFace Hub
+                model.model = PeftModel.from_pretrained(
+                    model.model, model_path, is_trainable=True
+                )
+        else:
+            # For full models, load the full state dict
+            model.load_state_dict(torch.load(model_path, map_location=device))
+
+        model.to(device)
+        return model
+
+    def save_pretrained(self, save_path: str):
+        """
+        Save the model weights.
+
+        Args:
+            save_path: Path to save the model to
+        """
+        os.makedirs(save_path, exist_ok=True)
+
+        if self.use_lora:
+            # Save only the LoRA weights
+            self.model.save_pretrained(save_path)
+        else:
+            # Save the full model
+            torch.save(self.state_dict(), os.path.join(save_path, "model.pt"))
+
+        # Save the config
+        import json
+
+        config = {
+            "model_name": self.model_name,
+            "n_gist_tokens": self.n_gist_tokens,
+            "block_size": self.block_size,
+            "max_steps": self.max_steps,
+            "timestep_token_size": self.timestep_token_size,
+            "use_lora": self.use_lora,
+        }
+        with open(os.path.join(save_path, "config.json"), "w") as f:
+            json.dump(config, f)
+
 
 class GPTLatentFlowMatchingPipeline:
     def __init__(
@@ -211,6 +322,7 @@ class GPTLatentFlowMatchingPipeline:
         decoder_model_id: str = None,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
+        use_lora: bool = False,
     ):
         """
         Pipeline for text completion using flow matching.
@@ -221,6 +333,7 @@ class GPTLatentFlowMatchingPipeline:
             decoder_model_id: HuggingFace repo ID for the decoder model
             torch_dtype: Data type for model parameters
             device: Device to run models on
+            use_lora: Whether the flow matching model uses LoRA
         """
         from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
         import json
@@ -260,42 +373,70 @@ class GPTLatentFlowMatchingPipeline:
             with open(config_path, "r") as f:
                 flow_config = json.load(f)
 
-            self.flow_model = GPTLatentFlowMatching(
-                model_name=flow_config["model_name"],
-                n_gist_tokens=self.config["n_gist_tokens"],
-                block_size=self.config["block_size"],
-                torch_dtype=torch_dtype,
-                device=device,
-            )
-            # Load state dict
-            self.flow_model.load_state_dict(torch.load(model_path, map_location=device))
+            # Check if this is a LoRA model
+            if use_lora or (flow_config.get("use_lora", False)):
+                self.flow_model = GPTLatentFlowMatching.from_pretrained(
+                    model_path=flow_matching_model_id,
+                    base_model_name=flow_config["model_name"],
+                    n_gist_tokens=self.config["n_gist_tokens"],
+                    block_size=self.config["block_size"],
+                    torch_dtype=torch_dtype,
+                    device=device,
+                    use_lora=True,
+                )
+            else:
+                self.flow_model = GPTLatentFlowMatching(
+                    model_name=flow_config["model_name"],
+                    n_gist_tokens=self.config["n_gist_tokens"],
+                    block_size=self.config["block_size"],
+                    torch_dtype=torch_dtype,
+                    device=device,
+                )
+                # Load state dict
+                self.flow_model.load_state_dict(
+                    torch.load(model_path, map_location=device)
+                )
         else:
             # HuggingFace Hub ID
             # Download config
             flow_config_path = snapshot_download(
                 repo_id=flow_matching_model_id,
-                allow_patterns=["config.json", "model.pt"],
+                allow_patterns=["config.json", "model.pt", "adapter_config.json"],
             )
 
             # Load config
             with open(os.path.join(flow_config_path, "config.json"), "r") as f:
                 flow_config = json.load(f)
 
-            # Initialize model
-            self.flow_model = GPTLatentFlowMatching(
-                model_name=flow_config["model_name"],
-                n_gist_tokens=self.config["n_gist_tokens"],
-                block_size=self.config["block_size"],
-                torch_dtype=torch_dtype,
-                device=device,
-            )
-
-            # Load weights
-            self.flow_model.load_state_dict(
-                torch.load(
-                    os.path.join(flow_config_path, "model.pt"), map_location=device
+            # Check if this is a LoRA model
+            if use_lora or os.path.exists(
+                os.path.join(flow_config_path, "adapter_config.json")
+            ):
+                self.flow_model = GPTLatentFlowMatching.from_pretrained(
+                    model_path=flow_matching_model_id,
+                    base_model_name=flow_config["model_name"],
+                    n_gist_tokens=self.config["n_gist_tokens"],
+                    block_size=self.config["block_size"],
+                    torch_dtype=torch_dtype,
+                    device=device,
+                    use_lora=True,
                 )
-            )
+            else:
+                # Initialize model
+                self.flow_model = GPTLatentFlowMatching(
+                    model_name=flow_config["model_name"],
+                    n_gist_tokens=self.config["n_gist_tokens"],
+                    block_size=self.config["block_size"],
+                    torch_dtype=torch_dtype,
+                    device=device,
+                )
+
+                # Load weights
+                self.flow_model.load_state_dict(
+                    torch.load(
+                        os.path.join(flow_config_path, "model.pt"), map_location=device
+                    )
+                )
 
         self.flow_model.to(device)
         self.flow_model.eval()
