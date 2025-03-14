@@ -43,10 +43,12 @@ class TextDataset(Dataset):
             max_length=self.block_size,
             add_special_tokens=True,
         ).input_ids
-        if random.random() < 0.25:
+        if random.random() < 0.1:
             n_tokens = random.randint(1, self.block_size // 2)
-        else:
+        elif random.random() < 0.5:
             n_tokens = random.randint(self.block_size // 2, self.block_size - 1)
+        else:
+            n_tokens = self.block_size
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         input_ids[0, n_tokens - 1] = self.tokenizer.eos_token_id
         return input_ids.squeeze(0)
