@@ -12,6 +12,9 @@ from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
+VAE_SHIFT = 0.07
+VAE_SCALE = 4.02
+
 
 class TextCompletionDataset(Dataset):
     def __init__(
@@ -306,6 +309,7 @@ def train_one_epoch(
             suffix_latents = encoder(
                 suffix_tokens, tokenizer.pad_token_id, include_ae_tokens=False
             )
+            suffix_latents = (suffix_latents - VAE_SHIFT) / VAE_SCALE
             vae_mean = suffix_latents.mean().item()
             vae_std = suffix_latents.std().item()
             vae_means.append(vae_mean)
@@ -435,6 +439,7 @@ def evaluate(
             predicted_latents = model.sample(
                 input_ids=prefix, initial_noise=initial_noise, num_steps=100
             )
+            predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
 
             # Decode using the decoder
             output_ids = decoder.generate(
