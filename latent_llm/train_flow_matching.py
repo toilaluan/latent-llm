@@ -12,8 +12,8 @@ from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
-VAE_SHIFT = -0.07
-VAE_SCALE = 4.02
+VAE_SHIFT = 0
+VAE_SCALE = 1.0
 
 
 class TextCompletionDataset(Dataset):
@@ -427,6 +427,8 @@ def evaluate(
 
     # Generate completions
     generated_suffixes = []
+    latent_means = []
+    latent_stds = []
     for i in range(min(args.num_samples, len(prefix_tokens))):
         prefix = prefix_tokens[i : i + 1]  # Keep batch dimension
 
@@ -441,10 +443,21 @@ def evaluate(
             )
             predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
 
-            # Decode using the decoder
-            output_ids = decoder.generate(
-                predicted_latents, max_new_tokens=50, temperature=0.7
+            # Sanitize latents with clamping
+            predicted_latents = torch.clamp(predicted_latents, min=-3.0, max=3.0)
+
+            # Track latent statistics
+            latent_means.append(predicted_latents.mean().item())
+            latent_stds.append(predicted_latents.std().item())
+            embeds = torch.cat(
+                [
+                    predicted_latents,
+                    encoder.ae_tokens.repeat(B, 1, 1),
+                ],
+                dim=1,
             )
+            # Decode using the decoder
+            output_ids = decoder.generate(embeds, max_new_tokens=50, temperature=0.0)
 
         # Decode generated text
         generated_suffix = tokenizer.decode(output_ids[0], skip_special_tokens=True)
@@ -482,6 +495,18 @@ def evaluate(
                 ),
                 "eval/epoch": epoch,
                 "eval/step": step,
+            }
+        )
+
+    # Log latent statistics
+    if args.use_wandb:
+        wandb.log(
+            {
+                "eval/latent_mean": np.mean(latent_means),
+                "eval/latent_std": np.mean(latent_stds),
+                "eval/latent_distribution": wandb.Histogram(
+                    predicted_latents.cpu().numpy()
+                ),
             }
         )
 
