@@ -12,6 +12,7 @@ import time
 import argparse
 
 torch.set_float32_matmul_precision("high")
+
 accelerator = Accelerator(mixed_precision="bf16")
 
 
@@ -42,7 +43,7 @@ def parse_args():
     parser.add_argument(
         "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
     )
-    parser.add_argument("--learning_rate", type=float, default=1e-4)
+    parser.add_argument("--learning_rate", type=float, default=2.5e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--batch_size", type=int, default=1)
@@ -196,6 +197,7 @@ def main():
             }
         )
         accelerator.backward(total_loss)
+        torch.nn.utils.clip_grad_norm_(TRAIN_PARAMS, 1.0)
         OPTIMIZER.step()
         PROCESSED_TOKENS += args.block_size * args.batch_size
         TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
