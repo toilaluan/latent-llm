@@ -306,7 +306,7 @@ def train_one_epoch(
 
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
-            suffix_latents = encoder(
+            suffix_latents, _, _ = encoder(
                 suffix_tokens, tokenizer.pad_token_id, include_ae_tokens=False
             )
             suffix_latents = (suffix_latents - VAE_SHIFT) / VAE_SCALE
