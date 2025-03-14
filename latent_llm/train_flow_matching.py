@@ -278,9 +278,9 @@ def train_one_epoch(
                 }
             )
 
-        # Save checkpoint
-        if step % args.checkpoint_interval == 0 and step > 0:
-            save_checkpoint(model, optimizer, epoch, step, args)
+        # # Save checkpoint
+        # if step % args.checkpoint_interval == 0 and step > 0:
+        #     save_checkpoint(model, optimizer, epoch, step, args)
 
         # Run evaluation
         if step % args.eval_interval == 0:
@@ -570,7 +570,7 @@ def main():
         print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
 
         # Save model after each epoch
-        save_checkpoint(flow_model, optimizer, epoch, 0, args)
+        # save_checkpoint(flow_model, optimizer, epoch, 0, args)
 
     # Save final model
     if args.use_wandb:
