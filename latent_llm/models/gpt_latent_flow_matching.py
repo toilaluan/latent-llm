@@ -34,6 +34,7 @@ class GPTLatentFlowMatching(nn.Module):
         self.timestep_embeddings = nn.Embedding(
             num_embeddings=max_steps * timestep_token_size,
             embedding_dim=self.base_config.hidden_size,
+            dtype=torch_dtype,
         )
         torch.nn.init.kaiming_normal_(self.timestep_embeddings.weight)
         self.latent_shape = (self.n_gist_tokens, self.base_config.hidden_size)
@@ -117,15 +118,11 @@ class GPTLatentFlowMatching(nn.Module):
         sigmas = torch.tensor(
             [[t / self.max_steps] for t in timesteps], device=self.device
         )  # Shape [B, 1]
-
+        sigmas = sigmas.to(self.torch_dtype)
         # Sample noise
-        noise = torch.randn_like(latents, device=self.device)
-
-        print("noise", noise.shape)
-        print(sigmas)
+        noise = torch.randn_like(latents, device=self.device, dtype=self.torch_dtype)
         # Interpolate between source and target
         noised_latents = (1.0 - sigmas) * latents + sigmas * noise
-
         # Target vector field for flow matching
         # This represents the direction toward the target distribution
         vector_field = noise - latents
@@ -151,7 +148,6 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Get noised latents and target vector field
         noised_latents, target_vector_field = self.get_noised_latent(latents, timesteps)
-        print(noised_latents.shape, target_vector_field.shape)
         # Predict vector field
         predicted_vector_field = self.forward(
             input_ids=input_ids,
