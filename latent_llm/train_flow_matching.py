@@ -144,6 +144,9 @@ def parse_args():
         "--learning_rate", type=float, default=5e-5, help="Learning rate for training"
     )
     parser.add_argument(
+        "--weight_decay", type=float, default=1e-4, help="Weight decay for training"
+    )
+    parser.add_argument(
         "--save_path",
         type=str,
         default="flow_matching_model",
@@ -237,6 +240,13 @@ def parse_args():
         help="Number of warmup steps",
     )
 
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=1000,
+        help="Maximum number of steps",
+    )
+
     return parser.parse_args()
 
 
@@ -306,7 +316,9 @@ def train_one_epoch(
             repeat_per_encode_pass = args.repeat_per_encode_pass
 
         for i in range(repeat_per_encode_pass):
-            timesteps = torch.randint(1, model.max_steps + 1, (batch_size,)).tolist()
+            timesteps = torch.randint(
+                1, args.max_steps + 1, (batch_size,), device=device
+            ).tolist()
 
             # Calculate flow matching loss
             loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
@@ -579,6 +591,7 @@ def main():
         model_name=args.model_name,
         n_gist_tokens=encoder_config["n_gist_tokens"],
         block_size=encoder_config["block_size"],
+        max_steps=args.max_steps,
         device=device,
         torch_dtype=torch_dtype,
         use_lora=args.use_lora,
@@ -613,7 +626,9 @@ def main():
 
     # Create optimizer
     optimizer = torch.optim.AdamW(
-        [p for p in flow_model.parameters() if p.requires_grad], lr=args.learning_rate
+        [p for p in flow_model.parameters() if p.requires_grad],
+        lr=args.learning_rate,
+        weight_decay=args.weight_decay,
     )
 
     # Create save directory
