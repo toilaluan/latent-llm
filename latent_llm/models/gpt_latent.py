@@ -380,6 +380,7 @@ class GPTLatentVAEPipeline:
         self.pretrained_encoder_id = pretrained_encoder_id
         self.pretrained_decoder_id = pretrained_decoder_id
         self.torch_dtype = torch_dtype
+        self.device = device
 
         self.encoder = None
         self.decoder = None
