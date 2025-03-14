@@ -66,6 +66,11 @@ class LatentEncoder(nn.Module):
             torch.randn(n_ae_tokens, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.block_size = block_size
+        self.latent_config = {
+            "n_gist_tokens": n_gist_tokens,
+            "n_ae_tokens": n_ae_tokens,
+            "block_size": block_size,
+        }
         self.init_weights()
         self.init_position_ids()
 

@@ -119,12 +119,6 @@ def parse_args():
         help="Optional pretrained decoder model ID (if different from encoder)",
     )
     parser.add_argument(
-        "--n_gist_tokens",
-        type=int,
-        default=64,
-        help="Number of gist tokens in the latent space",
-    )
-    parser.add_argument(
         "--block_size", type=int, default=1024, help="Block size for model input"
     )
     parser.add_argument(
@@ -435,8 +429,6 @@ def push_to_hub(model, args):
 
     config = {
         "model_name": args.model_name,
-        "n_gist_tokens": args.n_gist_tokens,
-        "block_size": args.block_size,
         "encoder_id": args.encoder_id,
         "decoder_id": args.decoder_id or args.encoder_id,
         "task": "text_completion",
@@ -485,15 +477,7 @@ def main():
     decoder_id = args.decoder_id if args.decoder_id else args.encoder_id
     print(f"Loading decoder model {decoder_id}...")
 
-    # Extract model parameters
-    config_path = os.path.join(
-        os.path.dirname(os.path.dirname(encoder.base_config.__file__)),
-        "latent_config.json",
-    )
-    import json
-
-    with open(config_path, "r") as f:
-        encoder_config = json.load(f)
+    encoder_config = encoder.latent_config
 
     # Create decoder
     decoder = LatentDecoder(
@@ -510,7 +494,7 @@ def main():
     flow_model = GPTLatentFlowMatching(
         model_name=args.model_name,
         n_gist_tokens=encoder_config["n_gist_tokens"],
-        block_size=args.block_size,
+        block_size=encoder_config["block_size"],
         device=device,
     )
     flow_model.to(device)
@@ -524,7 +508,7 @@ def main():
         dataset_id=args.dataset,
         split="train",
         tokenizer=tokenizer,
-        block_size=args.block_size,
+        block_size=encoder_config["block_size"],
         min_prefix_length=args.min_prefix_length,
         max_prefix_ratio=args.max_prefix_ratio,
     )
