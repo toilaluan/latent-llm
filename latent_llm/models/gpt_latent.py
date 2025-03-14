@@ -105,10 +105,11 @@ class LatentEncoder(nn.Module):
             input_ids = torch.cat(
                 [
                     input_ids,
-                    torch.ones(
-                        B, self.block_size - input_ids.size(1), device=input_ids.device
-                    )
-                    * pad_token_id,
+                    torch.full(
+                        (B, self.block_size - input_ids.size(1)),
+                        pad_token_id,
+                        device=input_ids.device,
+                    ).long(),
                 ],
                 dim=1,
             )
