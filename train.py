@@ -208,8 +208,8 @@ def log_parameter_counts(encoder, decoder):
 
 def validate(encoder, decoder, val_data, tokenizer, args):
     """Run validation and log metrics."""
-    # encoder.eval()
-    # decoder.eval()
+    encoder.eval()
+    decoder.eval()
 
     val_total_loss = 0.0
     val_rec_loss = 0.0
