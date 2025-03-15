@@ -349,6 +349,9 @@ def main():
     # Log parameter counts
     log_parameter_counts(encoder, decoder)
 
+    for p in decoder.parameters():
+        p.requires_grad = False
+
     # Setup optimizer
     train_params = []
     train_params.extend([p for p in encoder.parameters() if p.requires_grad])
