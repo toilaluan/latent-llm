@@ -118,7 +118,7 @@ class LatentEncoder(nn.Module):
         ).hidden_states[-1]
 
         # Get the hidden states for gist tokens
-        latents = last_hidden_states[:, -self.latent_size :, :]
+        latents = last_hidden_states[:, -self.latent_size - 1 : -1, :]
 
         logvar = self.latent_tokens_logvar.repeat(B, 1, 1)
 
