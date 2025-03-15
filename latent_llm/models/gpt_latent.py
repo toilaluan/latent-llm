@@ -1,4 +1,9 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    T5Model,
+    T5ForConditionalGeneration,
+)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -42,20 +47,19 @@ class LatentEncoder(nn.Module):
         enable_debug_logging: bool = False,
     ):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.model = T5Model.from_pretrained(
             model_name,
             torch_dtype=torch_dtype,
-            attn_implementation="flash_attention_2",
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.base_config = self.model.config
 
         # For VAE, we need separate parameters for mean and log variance
         self.gist_tokens_mean = nn.Parameter(
-            torch.randn(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
+            torch.randn(n_gist_tokens, self.base_config.d_model, dtype=torch_dtype)
         )
         self.gist_tokens_logvar = nn.Parameter(
-            torch.zeros(n_gist_tokens, self.base_config.hidden_size, dtype=torch_dtype)
+            torch.zeros(n_gist_tokens, self.base_config.d_model, dtype=torch_dtype)
         )
         self.n_gist_tokens = n_gist_tokens
         self.block_size = block_size
@@ -65,24 +69,9 @@ class LatentEncoder(nn.Module):
         }
         self.kl_weight = kl_weight
         self.init_weights()
-        self.init_position_ids()
         self.enable_debug_logging = enable_debug_logging
         if enable_debug_logging:
             _enable_debug_logging()
-
-    def init_position_ids(self):
-        mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)
-        memory_position_ids = torch.arange(self.n_gist_tokens) * mem_pos_step
-        position_ids = torch.cat(
-            [
-                torch.arange(self.block_size),
-                memory_position_ids,
-            ],
-            dim=0,
-        )
-        gist_masks = torch.ones(self.n_gist_tokens, dtype=torch.int64)
-        self.register_buffer("position_ids", position_ids)
-        self.register_buffer("gist_masks", gist_masks)
 
     def init_weights(self):
         torch.nn.init.kaiming_normal_(self.gist_tokens_mean)
@@ -120,43 +109,34 @@ class LatentEncoder(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
         logger.debug(f"input_ids: {input_ids[0]}")
-        embeds = self.model.get_input_embeddings()(input_ids)
-        masks = (input_ids != pad_token_id).to(dtype=torch.int64)
-        logger.debug(f"masks: {masks[0]}")
-        # Use gist_tokens_mean as initial tokens for model processing
-        gist_tokens = self.gist_tokens_mean.unsqueeze(0).expand(B, -1, -1)
 
-        embeds = torch.cat(
-            [
-                embeds,
-                gist_tokens,
-            ],
-            dim=1,
+        # Create attention mask
+        attention_mask = (input_ids != pad_token_id).to(dtype=torch.int64)
+        logger.debug(f"attention_mask: {attention_mask[0]}")
+
+        attention_mask = torch.cat(
+            [attention_mask, torch.ones_like(self.gist_tokens_mean.size(1))], dim=1
         )
-        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        masks = torch.cat([masks, self.gist_masks.repeat(B, 1)], dim=1)
-        logger.debug(f"position_ids: {position_ids[0]}")
-        logger.debug(f"concatenated masks: {masks[0]}")
 
-        last_hidden_states = self.model(
+        embeds = self.model.get_input_embeddings()(input_ids)
+        embeds = torch.cat(
+            [embeds, self.gist_tokens_mean.unsqueeze(0).expand(B, -1, -1)], dim=1
+        )
+
+        # Process input through T5 encoder
+        encoder_outputs = self.model.encoder(
             inputs_embeds=embeds,
-            output_hidden_states=True,
-            attention_mask=masks,
-            position_ids=position_ids,
-        ).hidden_states[-1]
+            attention_mask=attention_mask,
+        )
 
-        # Get the hidden states for gist tokens
-        gisted_hidden = last_hidden_states[:, -self.n_gist_tokens :, :]
-
-        # For VAE, we interpret these as parameters of the distribution
-        mean = gisted_hidden
+        # Get the encoder output
+        last_hidden_states = encoder_outputs.last_hidden_state
+        mean = last_hidden_states[:, -self.n_gist_tokens :, :]
         logvar = self.gist_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
-        logger.debug(f"mean: {mean[0]}")
-        logger.debug(f"logvar: {logvar[0]}")
-
         # Calculate KL divergence
         kl_loss = self.kl_divergence(mean, logvar) * self.kl_weight
         logger.debug(f"kl_loss: {kl_loss}")
+
         # Sample latent vectors using reparameterization trick
         gisted_embeds = self.reparameterize(mean, logvar)
 
@@ -281,25 +261,25 @@ class LatentDecoder(nn.Module):
         torch_dtype: torch.dtype = torch.bfloat16,
     ):
         super().__init__()
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=torch_dtype, attn_implementation="flash_attention_2"
+        self.model = T5ForConditionalGeneration.from_pretrained(
+            model_name, torch_dtype=torch_dtype
         )
         self.base_config = self.model.config
         self.mem_size = n_gist_tokens
         self.block_size = block_size
-        self.init_position_ids()
+        self.torch_dtype = torch_dtype
 
-    def init_position_ids(self):
-        mem_pos_step = max(self.block_size // self.mem_size, 1)
-        memory_position_ids = torch.arange(self.mem_size) * mem_pos_step
-        position_ids = torch.cat(
-            [
-                memory_position_ids,
-                torch.arange(self.block_size),
-            ],
-            dim=0,
+        # Create a projection layer if needed to match embedding dimensions
+        if hasattr(self.base_config, "d_model"):
+            self.hidden_size = self.base_config.d_model
+        else:
+            self.hidden_size = self.base_config.hidden_size
+
+        # T5 expects encoder hidden states as cross-attention input
+        # This layer will project our latent embeddings to encoder hidden states
+        self.latent_to_encoder_proj = nn.Linear(
+            self.hidden_size, self.hidden_size, dtype=torch_dtype
         )
-        self.register_buffer("position_ids", position_ids)
 
     def forward(
         self,
@@ -311,31 +291,37 @@ class LatentDecoder(nn.Module):
         B, T = input_ids.size()
         logger.debug(f"input_ids: {input_ids[0]}")
         logger.debug(f"mem shape: {mem_embeds.shape}")
-        embeds = self.model.get_input_embeddings()(input_ids)
-        embeds = torch.cat(
-            [
-                mem_embeds,
-                embeds,
-            ],
-            dim=1,
+
+        # Ensure mem_embeds has the correct dtype
+        mem_embeds = mem_embeds.to(dtype=self.torch_dtype)
+
+        # Project memory embeddings to encoder hidden states format
+        encoder_hidden_states = self.latent_to_encoder_proj(mem_embeds)
+
+        # Create a proper BaseModelOutput object for encoder_outputs
+        from transformers.modeling_outputs import BaseModelOutput
+
+        encoder_outputs = BaseModelOutput(last_hidden_state=encoder_hidden_states)
+
+        # Create attention mask for decoder inputs
+        decoder_attention_mask = (input_ids != self.model.config.pad_token_id).long()
+
+        # Run the T5 model with encoder_outputs to use cross-attention
+        # between decoder and our projected memory embeddings
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            labels=labels if labels is not None else None,
+            return_dict=True,
         )
-        logger.debug(f"embeds shape: {embeds[0]}")
-        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        logger.debug(f"position_ids shape: {position_ids[0]}")
-        logits = self.model(
-            inputs_embeds=embeds,
-            # position_ids=position_ids,
-        ).logits
-        # labels = [a b c d], mem_embeds = [m m m m]
-        # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
-        # label map: [x a b c] -> [a b c d]
-        logits = logits[:, mem_embeds.size(1) - 1 : -1, :]
+
+        # Get logits
+        logits = outputs.logits
+
         if labels is not None:
-            loss = F.cross_entropy(
-                logits.reshape(-1, logits.size(-1)),
-                labels.reshape(-1),
-                ignore_index=ignore_index,
-            )
+            # Use the loss directly from the T5 model
+            loss = outputs.loss
 
             # Calculate token accuracy
             predictions = torch.argmax(logits, dim=-1)
@@ -351,69 +337,147 @@ class LatentDecoder(nn.Module):
 
     def generate(
         self,
-        embeds: torch.Tensor,
+        mem_embeds: torch.Tensor,
         max_new_tokens: int,
-        temperature: float = 0.01,
+        temperature: float = 0.7,
         **kwargs,
     ) -> torch.Tensor:
-        """Generate text using a more efficient approach with temperature sampling."""
-        embeds = embeds.to(self.model.dtype)
-        B = embeds.size(0)
-        device = embeds.device
-        generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
-        # Create attention mask (1 for all tokens)
-        attention_mask = torch.ones(
-            (B, embeds.size(1)), dtype=torch.long, device=device
+        """Generate text using T5's built-in generation method with our memory embeddings."""
+        B = mem_embeds.size(0)
+        device = mem_embeds.device
+
+        # Ensure mem_embeds has the correct dtype
+        mem_embeds = mem_embeds.to(dtype=self.torch_dtype)
+
+        # Project memory embeddings to encoder hidden states format
+        encoder_hidden_states = self.latent_to_encoder_proj(mem_embeds)
+
+        # Create a proper BaseModelOutput object for encoder_outputs
+        from transformers.modeling_outputs import BaseModelOutput
+
+        encoder_outputs = BaseModelOutput(last_hidden_state=encoder_hidden_states)
+
+        # Create dummy input for the decoder to start generation
+        decoder_input_ids = (
+            torch.ones((B, 1), device=device, dtype=torch.long)
+            * self.model.config.decoder_start_token_id
         )
-        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        max_new_tokens = min(max_new_tokens, self.position_ids.size(0) - embeds.size(1))
-        print("max_new_tokens", max_new_tokens)
 
-        # Generate tokens one by one
-        for _ in range(max_new_tokens):
-            # Forward pass
-            outputs = self.model(
-                inputs_embeds=embeds,
-                attention_mask=attention_mask,
-                # position_ids=position_ids,
-            )
-            logits = outputs.logits[:, -1, :]
-            # Apply temperature scaling
-            scaled_logits = logits / max(temperature, 1e-7)
+        # Use T5's built-in generation with our encoder outputs
+        output_ids = self.model.generate(
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True if temperature > 0 else False,
+            temperature=temperature,
+            **kwargs,
+        )
 
-            # Sample from the distribution
-            if temperature > 0:
-                probs = torch.softmax(scaled_logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
-            else:
-                next_token = torch.argmax(scaled_logits, dim=-1, keepdim=True)
+        return output_ids
 
-            # Check if all sequences have EOS
-            if (next_token == self.model.config.eos_token_id).all():
-                break
-
-            # Append new tokens
-            if generated_ids.size(1) == 0:
-                generated_ids = next_token
-            else:
-                generated_ids = torch.cat([generated_ids, next_token], dim=1)
-
-            # Update input embeddings for next iteration
-            next_token_embeds = self.model.get_input_embeddings()(next_token)
-            embeds = torch.cat([embeds, next_token_embeds], dim=1)
-
-            # Update attention mask
-            new_mask = torch.ones((B, 1), dtype=torch.long, device=device)
-            attention_mask = torch.cat([attention_mask, new_mask], dim=1)
-            position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-
-        return generated_ids
-
-    def push_to_hub(self, repo_id: str):
+    def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         self.model.push_to_hub(repo_id)
 
+        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/decoder_proj.safetensors")
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
-class GPTLatentVAEPipeline:
+        # Save projection layer using safetensors
+        tensors = {
+            "weight": self.latent_to_encoder_proj.weight.data,
+            "bias": (
+                self.latent_to_encoder_proj.bias.data
+                if self.latent_to_encoder_proj.bias is not None
+                else None
+            ),
+        }
+        save_path = f"{ckpt_dir}/{repo_id}/decoder_proj.safetensors"
+        save_file(tensors, save_path)
+
+        # Save configuration parameters
+        config = {
+            "n_gist_tokens": self.mem_size,
+            "block_size": self.block_size,
+        }
+        import json
+
+        config_path = f"{ckpt_dir}/{repo_id}/decoder_config.json"
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+
+        # Upload to hub
+        hf_api = HfApi()
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=save_path,
+            path_in_repo="decoder_proj.safetensors",
+        )
+        # Upload config
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=config_path,
+            path_in_repo="decoder_config.json",
+        )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        repo_id: str,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: str = "cuda",
+    ):
+        """Create a LatentDecoder instance from a pretrained model on the Hub."""
+        # Download config
+        try:
+            config_path = snapshot_download(
+                repo_id=repo_id, allow_patterns=["decoder_config.json"]
+            )
+            config_path = os.path.join(config_path, "decoder_config.json")
+            import json
+
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Could not find decoder_config.json in {repo_id}") from e
+
+        # Get model name from repo
+        model_name = repo_id
+
+        # Create instance with loaded config
+        instance = cls(
+            model_name=model_name,
+            n_gist_tokens=config["n_gist_tokens"],
+            block_size=config["block_size"],
+            torch_dtype=torch_dtype,
+        )
+
+        # Load projection layer weights
+        instance.load_pretrained(repo_id)
+        instance.to(device)
+        return instance
+
+    def load_pretrained(self, repo_id: str):
+        # Download safetensors file
+        proj_path = snapshot_download(
+            repo_id=repo_id,
+            allow_patterns=["decoder_proj.safetensors"],
+            force_download=True,
+        )
+        proj_path = os.path.join(proj_path, "decoder_proj.safetensors")
+        print(f"Loading decoder projection from {proj_path}")
+
+        # Load tensors using safetensors
+        if os.path.exists(proj_path):
+            tensors = load_file(proj_path)
+            self.latent_to_encoder_proj.weight.data = tensors["weight"]
+            if "bias" in tensors and tensors["bias"] is not None:
+                self.latent_to_encoder_proj.bias.data = tensors["bias"]
+            print(f"Loaded decoder projection from {proj_path}")
+        else:
+            raise ValueError(f"Could not find decoder_proj.safetensors in {repo_id}")
+
+
+class T5LatentVAEPipeline:
     def __init__(
         self,
         pretrained_encoder_id: Optional[str] = None,
@@ -422,12 +486,13 @@ class GPTLatentVAEPipeline:
         device: str = "cuda",
     ):
         """
-        Initialize the GPTLatentPipeline with pretrained encoder and/or decoder.
+        Initialize the T5LatentVAEPipeline with pretrained encoder and/or decoder.
 
         Args:
             pretrained_encoder_id: HuggingFace repo ID for the encoder
             pretrained_decoder_id: HuggingFace repo ID for the decoder
             torch_dtype: Torch dtype for the models
+            device: Device to load the models on
         """
         self.pretrained_encoder_id = pretrained_encoder_id
         self.pretrained_decoder_id = pretrained_decoder_id
@@ -457,7 +522,7 @@ class GPTLatentVAEPipeline:
     def _load_decoder(self):
         """Load the decoder model if not already loaded."""
         if self.decoder is None and self.pretrained_decoder_id:
-            # Get model name from repo ID (assuming format is consistent with LatentEncoder.from_pretrained)
+            # Get model name from repo ID
             model_name = self.pretrained_decoder_id
 
             # Download config to get parameters
@@ -553,17 +618,46 @@ class GPTLatentVAEPipeline:
         return output_text
 
 
+# Backwards compatibility alias
+GPTLatentVAEPipeline = T5LatentVAEPipeline
+
+
 if __name__ == "__main__":
-    model_name = "HuggingFaceTB/SmolLM2-135M"
+    # Use a T5 model for demonstration
+    model_name = "t5-small"
     n_gist_tokens = 64
+    block_size = 512
+
+    # Initialize tokenizer
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    latent_encoder = LatentEncoder(model_name, n_gist_tokens)
-    latent_decoder = LatentDecoder(model_name, n_gist_tokens)
 
-    input_ids = torch.randint(0, 100, (1, 10))
-    mem_embeds, mean = latent_encoder(input_ids)
-    logits, loss, _ = latent_decoder(input_ids, mem_embeds, labels=input_ids)
-    print(loss)
+    # Add padding token if not present
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
-    completion = latent_decoder.generate(mem_embeds, input_ids, max_new_tokens=10)
-    print(tokenizer.decode(completion[0]))
+    # Create encoder and decoder
+    latent_encoder = LatentEncoder(model_name, n_gist_tokens, block_size)
+    latent_decoder = LatentDecoder(model_name, n_gist_tokens, block_size)
+
+    # Prepare sample input
+    sample_text = "This is a sample input to test our T5 latent VAE model."
+    input_ids = tokenizer(
+        sample_text,
+        return_tensors="pt",
+        padding="max_length",
+        max_length=block_size,
+        truncation=True,
+    ).input_ids
+
+    # Encode to latent space
+    mem_embeds, mean = latent_encoder(input_ids, tokenizer.pad_token_id)
+    print(f"Memory embeddings shape: {mem_embeds.shape}")
+
+    # Prepare decoder input (for demonstration)
+    decoder_input = tokenizer("", return_tensors="pt").input_ids
+
+    # Decode from latent space
+    output_ids = latent_decoder.generate(mem_embeds, max_new_tokens=50)
+    generated_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    print("Generated text:", generated_text)
