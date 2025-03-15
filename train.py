@@ -290,8 +290,8 @@ def validate(encoder, decoder, val_data, tokenizer, args):
         logger.info(f"  kl_loss: {val_kl_loss:.4f}")
         logger.info(f"  token_accuracy: {val_token_accuracy:.4f}")
         logger.info(f"  completion_accuracy: {val_completion_accuracy:.4f}")
-        logger.info(f"  sample completion: {completion[:32]}...")
-        logger.info(f"  sample label: {label[:32]}...")
+        logger.info(f"  sample completion: {completion}...")
+        logger.info(f"  sample label: {label}...")
 
     encoder.train()
     decoder.train()
