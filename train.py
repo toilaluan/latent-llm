@@ -214,33 +214,42 @@ def validate(encoder, decoder, val_data, tokenizer, args):
     val_kl_loss = 0.0
     val_token_accuracy = 0.0
     val_completion_accuracy = 0.0
-
+    val_completion_accuracy_rep = 0.0
     with torch.no_grad():
         # Process validation samples
         for val_sample in val_data:
             val_sample = val_sample.unsqueeze(0).to(accelerator.device)
 
             # Get latent representation
-            latent_embeds, kl_loss, latents = encoder(
+            rep_latent_embeds, kl_loss, latent_embeds = encoder(
                 val_sample, pad_token_id=tokenizer.pad_token_id
             )
-
             # Calculate reconstruction loss
             logits, loss, token_acc = decoder(
                 val_sample,
-                latent_embeds,
+                rep_latent_embeds,
                 labels=val_sample,
                 ignore_index=tokenizer.pad_token_id,
             )
 
-            # Generate completion
-            generated_ids = decoder.generate(
-                latent_embeds,
+            # Generate completion from reparametrized latent embeddings
+            rep_generated_ids = decoder.generate(
+                rep_latent_embeds,
                 max_new_tokens=encoder.block_size,
             )[0].tolist()
 
             # Calculate completion accuracy
             target_ids = val_sample[0].tolist()
+            sample_completion_acc_rep = calculate_completion_accuracy(
+                rep_generated_ids, target_ids
+            )
+
+            # Generate completion from original latent embeddings
+            generated_ids = decoder.generate(
+                latent_embeds,
+                max_new_tokens=encoder.block_size,
+            )[0].tolist()
+
             sample_completion_acc = calculate_completion_accuracy(
                 generated_ids, target_ids
             )
@@ -251,7 +260,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
             val_kl_loss += kl_loss.item()
             val_token_accuracy += token_acc.item()
             val_completion_accuracy += sample_completion_acc
-
+            val_completion_accuracy_rep += sample_completion_acc_rep
         # Average metrics
         val_samples = len(val_data)
         val_total_loss /= val_samples
@@ -259,7 +268,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
         val_kl_loss /= val_samples
         val_token_accuracy /= val_samples
         val_completion_accuracy /= val_samples
-
+        val_completion_accuracy_rep /= val_samples
         # Log validation metrics
         wandb.log(
             {
@@ -268,18 +277,24 @@ def validate(encoder, decoder, val_data, tokenizer, args):
                 "val/kl_loss": val_kl_loss,
                 "val/token_accuracy": val_token_accuracy,
                 "val/completion_accuracy": val_completion_accuracy,
+                "val/completion_accuracy_rep": val_completion_accuracy_rep,
             }
         )
 
         # Log a sample completion
         sample_idx = 0
         completion = tokenizer.decode(generated_ids)
+        completion_rep = tokenizer.decode(rep_generated_ids)
         label = tokenizer.decode(target_ids)
         wandb.log(
             {
                 "val/completion": wandb.Table(
                     columns=["Type", "Text"],
-                    data=[["Completion", completion], ["Label", label]],
+                    data=[
+                        ["Completion", completion],
+                        ["Label", label],
+                        ["Completion Rep", completion_rep],
+                    ],
                 ),
             }
         )
@@ -290,6 +305,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
         logger.info(f"  kl_loss: {val_kl_loss:.4f}")
         logger.info(f"  token_accuracy: {val_token_accuracy:.4f}")
         logger.info(f"  completion_accuracy: {val_completion_accuracy:.4f}")
+        logger.info(f"  completion_accuracy_rep: {val_completion_accuracy_rep:.4f}")
         logger.info(f"  sample completion: {completion}...")
         logger.info(f"  sample label: {label}...")
 
