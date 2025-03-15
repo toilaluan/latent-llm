@@ -131,14 +131,9 @@ class LatentEncoder(nn.Module):
         return rep_latent_embeds, kl_loss, latents
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
-        if self.use_lora:
-            self.model.save_pretrained(f"{ckpt_dir}/{repo_id}")
-            # Upload the PEFT adapter to Hub
-            self.model.push_to_hub(repo_id)
-        else:
-            self.model.push_to_hub(repo_id)
+        self.model.push_to_hub(repo_id)
 
-        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}/gist_tokens.npy")
+        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}")
         if not os.path.exists(folder):
             os.makedirs(folder)
 
