@@ -231,6 +231,11 @@ def validate(encoder, decoder, val_data, tokenizer, args):
                 labels=val_sample,
                 ignore_index=tokenizer.pad_token_id,
             )
+            latent_mean = latent_embeds.mean()
+            latent_std = latent_embeds.std()
+            logger.info(
+                f"latent_mean: {latent_mean.item():.4f}; latent_std: {latent_std.item():.4f}"
+            )
 
             # Generate completion from reparametrized latent embeddings
             rep_generated_ids = decoder.generate(
