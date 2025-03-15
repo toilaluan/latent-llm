@@ -467,8 +467,6 @@ class GPTLatentVAEPipeline:
         self,
         latent_embeds: torch.Tensor,
         max_new_tokens: int = 100,
-        temperature: float = 0.7,
-        **kwargs,
     ) -> str:
         if not self.pretrained_decoder_id:
             raise ValueError("Decoder model ID not provided during initialization")
@@ -483,8 +481,6 @@ class GPTLatentVAEPipeline:
             output_ids = self.decoder.generate(
                 latent_embeds,
                 max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                **kwargs,
             )
 
         # Decode output tokens to text

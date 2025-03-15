@@ -25,21 +25,6 @@ def parse_args():
         required=True,
         help="HuggingFace model ID for the decoder",
     )
-    parser.add_argument(
-        "--base_model_id",
-        type=str,
-        default="HuggingFaceTB/SmolLM2-135M",
-        help="Base model ID",
-    )
-    parser.add_argument(
-        "--max_new_tokens",
-        type=int,
-        default=512,
-        help="Maximum number of new tokens to generate",
-    )
-    parser.add_argument(
-        "--temperature", type=float, default=0.7, help="Sampling temperature"
-    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--input_text",
@@ -88,8 +73,7 @@ def main():
     logger.info("Generating text from latent representation...")
     generated_text = pipeline.decode(
         latent_embeds,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
+        max_new_tokens=pipeline.encoder.block_size,
     )
 
     logger.info("\n--- Results ---")

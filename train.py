@@ -33,26 +33,24 @@ logger = logging.getLogger(__name__)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Training script for latent LLM.")
-    parser.add_argument("--model_name", type=str, default="HuggingFaceTB/SmolLM2-135M")
-    parser.add_argument("--dataset_type", type=str, default="text")
+    parser.add_argument("--model-name", type=str, default="HuggingFaceTB/SmolLM2-135M")
+    parser.add_argument("--dataset-type", type=str, default="text")
     parser.add_argument(
-        "--dataset_id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
+        "--dataset-id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
     )
-    parser.add_argument("--split", type=str, default="train")
-    parser.add_argument("--val_split", type=str, default="validation")
     parser.add_argument(
-        "--val_samples", type=int, default=10, help="Number of validation samples"
+        "--val-samples", type=int, default=10, help="Number of validation samples"
     )
-    parser.add_argument("--block_size", type=int, default=256)
-    parser.add_argument("--latent_size", type=int, default=256)
+    parser.add_argument("--block-size", type=int, default=256)
+    parser.add_argument("--latent-size", type=int, default=256)
     parser.add_argument(
-        "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
+        "--hub-repo-id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
     )
-    parser.add_argument("--learning_rate", type=float, default=1e-4)
-    parser.add_argument("--weight_decay", type=float, default=1e-4)
-    parser.add_argument("--max_grad_norm", type=float, default=1.0)
-    parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--learning-rate", type=float, default=1e-4)
+    parser.add_argument("--weight-decay", type=float, default=1e-4)
+    parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--device",
@@ -63,19 +61,19 @@ def parse_args():
             else "mps" if torch.backends.mps.is_available() else "cpu"
         ),
     )
-    parser.add_argument("--log_interval", type=int, default=10)
-    parser.add_argument("--validating_interval", type=int, default=100)
-    parser.add_argument("--save_interval", type=int, default=1_000)
-    parser.add_argument("--training_steps", type=int, default=100_000)
-    parser.add_argument("--wandb_project", type=str, default="latent-llm")
+    parser.add_argument("--log-interval", type=int, default=10)
+    parser.add_argument("--validating-interval", type=int, default=100)
+    parser.add_argument("--save-interval", type=int, default=1_000)
+    parser.add_argument("--training-steps", type=int, default=100_000)
+    parser.add_argument("--wandb-project", type=str, default="latent-llm")
     parser.add_argument(
-        "--kl_weight",
+        "--kl-weight",
         type=float,
         default=0.00001,
         help="Weight for KL divergence loss",
     )
     parser.add_argument(
-        "--attn_implementation",
+        "--attn-implementation",
         type=str,
         default="flash_attention_2",
         help="Attention implementation to use",
@@ -131,7 +129,7 @@ def setup_datasets(args, tokenizer):
     # Use TextDataset for validation
     val_dataset = TextDataset(
         dataset_id=args.dataset_id,
-        split=args.val_split,
+        split="train",
         block_size=args.block_size,
         model_name=args.model_name,
     )
