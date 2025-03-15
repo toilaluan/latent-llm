@@ -86,7 +86,7 @@ class LatentEncoder(nn.Module):
 
     def kl_divergence(self, mean, logvar):
         return -0.5 * torch.mean(
-            torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=[1, 2])
+            torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=-1)
         )
 
     def forward(
