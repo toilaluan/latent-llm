@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 import torch
-from latent_llm.data.text_dataset import TextDataset, RandomTextDataset
+from latent_llm.data.text_dataset import (
+    TextDataset,
+    RandomTextDataset,
+    RandomTokenDataset,
+)
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
@@ -139,7 +143,7 @@ def main():
             model_name=args.model_name,
         )
     else:
-        DATASET = RandomTextDataset(
+        DATASET = RandomTokenDataset(
             model_name=args.model_name,
             block_size=args.block_size,
         )
