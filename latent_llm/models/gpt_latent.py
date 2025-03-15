@@ -302,7 +302,11 @@ class LatentDecoder(nn.Module):
                 logits.reshape(-1, logits.size(-1)),
                 labels.reshape(-1),
                 ignore_index=ignore_index,
+                reduction="none",
             )
+            print(max(loss))
+            print(min(loss))
+            loss = loss.mean()
 
             # Calculate token accuracy
             predictions = torch.argmax(logits, dim=-1)
