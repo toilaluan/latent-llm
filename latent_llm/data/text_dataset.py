@@ -74,7 +74,6 @@ class RandomTokenDataset(Dataset):
             padding="max_length",
             truncation=True,
             max_length=self.block_size,
-            add_eos_token=True,
         ).input_ids
         if random.random() < 0.1:
             n_tokens = random.randint(1, self.block_size // 2 + 1)
