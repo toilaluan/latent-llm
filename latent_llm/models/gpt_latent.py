@@ -85,9 +85,12 @@ class LatentEncoder(nn.Module):
         return mean + eps * std
 
     def kl_divergence(self, mean, logvar):
-        return -0.5 * torch.mean(
-            torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=-1)
-        )
+        # Sum across hidden dimension
+        kl_per_latent = torch.sum(1 + logvar - mean.pow(2) - logvar.exp(), dim=2)
+        # Mean across latent dimension first
+        kl_per_batch = torch.mean(kl_per_latent, dim=1)
+        # Then mean across batch dimension
+        return -0.5 * torch.mean(kl_per_batch, dim=0)
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
