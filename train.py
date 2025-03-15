@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import torch
 from latent_llm.data.text_dataset import (
     TextDataset,
@@ -10,11 +9,14 @@ from transformers import AutoTokenizer
 import wandb
 import logging
 from rich.logging import RichHandler
-from accelerate import Accelerator
 import time
 import argparse
 
-accelerator = Accelerator(mixed_precision="bf16")
+DEVICE = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
+)
 
 
 def cycle(dataloader):
@@ -218,7 +220,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
     with torch.no_grad():
         # Process validation samples
         for val_sample in val_data:
-            val_sample = val_sample.unsqueeze(0).to(accelerator.device)
+            val_sample = val_sample.unsqueeze(0).to(DEVICE)
 
             # Get latent representation
             rep_latent_embeds, kl_loss, latent_embeds = encoder(
@@ -325,10 +327,8 @@ def save_models(encoder, decoder, args):
     logger.info("Saving to hub...")
     try:
         # Unwrap models before pushing to hub
-        unwrapped_encoder = accelerator.unwrap_model(encoder)
-        unwrapped_encoder.push_to_hub(args.hub_repo_id + "-encoder")
-        unwrapped_decoder = accelerator.unwrap_model(decoder)
-        unwrapped_decoder.push_to_hub(args.hub_repo_id + "-decoder")
+        encoder.push_to_hub(args.hub_repo_id + "-encoder")
+        decoder.push_to_hub(args.hub_repo_id + "-decoder")
     except Exception as e:
         logger.error(f"Error pushing to hub: {e}")
 
@@ -362,11 +362,8 @@ def main():
     )
 
     # Prepare for distributed training
-    encoder, decoder, train_dataloader, optimizer = accelerator.prepare(
-        encoder, decoder, train_dataloader, optimizer
-    )
-    encoder.to(accelerator.device)
-    decoder.to(accelerator.device)
+    encoder.to(DEVICE)
+    decoder.to(DEVICE)
 
     # Training loop
     current_step = 0
@@ -376,7 +373,7 @@ def main():
     for batch in train_dataloader:
         optimizer.zero_grad()
         total_loss, rec_loss, kl_loss, latent_embeds, input_ids, token_accuracy = (
-            training_step(encoder, decoder, batch, tokenizer, accelerator.device)
+            training_step(encoder, decoder, batch, tokenizer, DEVICE)
         )
         latent_embeds_mean = latent_embeds.mean()
         latent_embeds_std = latent_embeds.std()
@@ -390,9 +387,9 @@ def main():
                 "train/latent_embeds_std": latent_embeds_std.item(),
             }
         )
-        accelerator.backward(total_loss)
+        total_loss.backward()
         if args.use_grad_norm:
-            accelerator.clip_grad_norm_(train_params, args.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(train_params, args.max_grad_norm)
         optimizer.step()
         processed_tokens += args.block_size * args.batch_size
         token_per_second = processed_tokens / (time.time() - start_time)
