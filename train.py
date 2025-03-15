@@ -157,7 +157,7 @@ def main():
     TRAIN_PARAMS = []
     TRAIN_PARAMS.extend([p for p in ENCODER.parameters() if p.requires_grad])
     TRAIN_PARAMS.extend([p for p in DECODER.parameters() if p.requires_grad])
-
+    logger.info(f"Total trainable parameters: {sum(p.numel() for p in TRAIN_PARAMS)}")
     OPTIMIZER = torch.optim.AdamW(
         TRAIN_PARAMS,
         lr=args.learning_rate,
