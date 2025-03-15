@@ -99,8 +99,8 @@ class LatentEncoder(nn.Module):
         context_embeds = self.model.get_input_embeddings()(input_ids)
         masks = input_ids != pad_token_id
 
-        # Use gist_tokens_mean as initial tokens for model processing
-        latent_tokens = self.latent_tokens_mean.repeat(B, 1, 1)
+        # Use expand instead of repeat for more memory efficiency
+        latent_tokens = self.latent_tokens_mean.unsqueeze(0).expand(B, -1, -1)
 
         inputs_embeds = torch.cat(
             [
@@ -112,7 +112,9 @@ class LatentEncoder(nn.Module):
         masks = torch.cat(
             [masks, torch.ones(B, self.latent_size, device=masks.device)], dim=1
         )
-        position_ids = self.position_ids[: inputs_embeds.size(1)].repeat(B, 1)
+        position_ids = (
+            self.position_ids[: inputs_embeds.size(1)].unsqueeze(0).expand(B, -1)
+        )
         last_hidden_states = self.model(
             inputs_embeds=inputs_embeds,
             output_hidden_states=True,
@@ -123,7 +125,7 @@ class LatentEncoder(nn.Module):
         # Get the hidden states for gist tokens
         latents = last_hidden_states[:, -self.latent_size :, :]
 
-        logvar = self.latent_tokens_logvar.repeat(B, 1, 1)
+        logvar = self.latent_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
 
         # Calculate KL divergence
         kl_loss = self.kl_divergence(latents, logvar) * self.kl_weight
