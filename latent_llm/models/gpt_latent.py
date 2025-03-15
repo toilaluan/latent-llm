@@ -324,7 +324,7 @@ class LatentDecoder(nn.Module):
         logger.debug(f"position_ids shape: {position_ids[0]}")
         logits = self.model(
             inputs_embeds=embeds,
-            # position_ids=position_ids,
+            position_ids=position_ids,
         ).logits
         # labels = [a b c d], mem_embeds = [m m m m]
         # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
@@ -375,7 +375,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
-                # position_ids=position_ids,
+                position_ids=position_ids,
             )
             logits = outputs.logits[:, -1, :]
             # Apply temperature scaling
