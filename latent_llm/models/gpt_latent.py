@@ -119,10 +119,10 @@ class LatentEncoder(nn.Module):
         self, input_ids: torch.Tensor, pad_token_id: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
-        logger.debug(f"input_ids: {input_ids}")
+        logger.debug(f"input_ids: {input_ids[0]}")
         embeds = self.model.get_input_embeddings()(input_ids)
         masks = (input_ids != pad_token_id).to(dtype=torch.int64)
-        logger.debug(f"masks: {masks}")
+        logger.debug(f"masks: {masks[0]}")
         # Use gist_tokens_mean as initial tokens for model processing
         gist_tokens = self.gist_tokens_mean.unsqueeze(0).expand(B, -1, -1)
 
@@ -135,8 +135,8 @@ class LatentEncoder(nn.Module):
         )
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
         masks = torch.cat([masks, self.gist_masks.repeat(B, 1)], dim=1)
-        logger.debug(f"position_ids: {position_ids}")
-        logger.debug(f"concatenated masks: {masks}")
+        logger.debug(f"position_ids: {position_ids[0]}")
+        logger.debug(f"concatenated masks: {masks[0]}")
 
         last_hidden_states = self.model(
             inputs_embeds=embeds,
@@ -151,8 +151,8 @@ class LatentEncoder(nn.Module):
         # For VAE, we interpret these as parameters of the distribution
         mean = gisted_hidden
         logvar = self.gist_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
-        logger.debug(f"mean: {mean}")
-        logger.debug(f"logvar: {logvar}")
+        logger.debug(f"mean: {mean[0]}")
+        logger.debug(f"logvar: {logvar[0]}")
 
         # Calculate KL divergence
         kl_loss = self.kl_divergence(mean, logvar) * self.kl_weight
@@ -309,7 +309,7 @@ class LatentDecoder(nn.Module):
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
-        logger.debug(f"input_ids: {input_ids}")
+        logger.debug(f"input_ids: {input_ids[0]}")
         logger.debug(f"mem shape: {mem_embeds.shape}")
         embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
@@ -319,9 +319,9 @@ class LatentDecoder(nn.Module):
             ],
             dim=1,
         )
-        logger.debug(f"embeds shape: {embeds.shape}")
+        logger.debug(f"embeds shape: {embeds[0]}")
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
-        logger.debug(f"position_ids shape: {position_ids.shape}")
+        logger.debug(f"position_ids shape: {position_ids[0]}")
         logits = self.model(
             inputs_embeds=embeds,
             # position_ids=position_ids,
