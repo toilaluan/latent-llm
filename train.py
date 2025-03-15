@@ -88,7 +88,6 @@ def main():
         model_name=args.model_name,
         n_gist_tokens=args.n_gist_tokens,
         block_size=args.block_size,
-        kl_weight=args.decoder_kl_weight,
     )
 
     TOKENIZER = AutoTokenizer.from_pretrained(args.model_name)
