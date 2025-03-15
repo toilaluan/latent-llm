@@ -89,6 +89,12 @@ def parse_args():
         default="q_proj,v_proj",
         help="Comma-separated list of modules to apply LoRA to",
     )
+    parser.add_argument(
+        "--kl_weight",
+        type=float,
+        default=0.00001,
+        help="Weight for KL divergence loss",
+    )
     return parser.parse_args()
 
 
