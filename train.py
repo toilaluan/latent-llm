@@ -139,7 +139,7 @@ def setup_datasets(args, tokenizer):
     # Create a fixed validation set with n samples
     val_samples = min(args.val_samples, len(val_dataset))
     val_indices = list(range(val_samples))
-    val_data = [val_dataset[i] for i in val_indices]
+    val_data = [train_dataset[i] for i in val_indices]
 
     return train_dataloader, val_data
 
