@@ -12,6 +12,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Add this code to enable debug logging
+def enable_debug_logging():
+    logger.setLevel(logging.DEBUG)
+
+
+# Call this function at the beginning of your script or before using the models
+# enable_debug_logging()  # Uncomment this line to enable debug logging
+
 CKPT_DIR = ".training_cache/checkpoints"
 
 if not os.path.exists(CKPT_DIR):
@@ -26,6 +34,7 @@ class LatentEncoder(nn.Module):
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
         kl_weight: float = 1e-4,
+        enable_debug_logging: bool = False,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -52,6 +61,7 @@ class LatentEncoder(nn.Module):
         self.kl_weight = kl_weight
         self.init_weights()
         self.init_position_ids()
+        self.enable_debug_logging = enable_debug_logging
 
     def init_position_ids(self):
         mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)

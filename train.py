@@ -63,6 +63,7 @@ def parse_args():
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--kl_weight", type=float, default=1e-4)
     parser.add_argument("--use_normalization", type=bool, default=False)
+    parser.add_argument("--debug", action="store_true", default=False)
     return parser.parse_args()
 
 
@@ -80,6 +81,7 @@ def main():
         n_gist_tokens=args.n_gist_tokens,
         block_size=args.block_size,
         kl_weight=args.kl_weight,
+        enable_debug_logging=args.debug,
     )
     DECODER = LatentDecoder(
         model_name=args.model_name,
