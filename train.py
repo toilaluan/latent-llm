@@ -132,7 +132,6 @@ def main():
             total_loss,
             ce_loss,
             encoder_kl_loss,
-            decoder_kl_loss,
             mem_embeds,
             input_ids,
             token_accuracy,
@@ -199,7 +198,6 @@ def main():
             total_loss,
             ce_loss,
             encoder_kl_loss,
-            decoder_kl_loss,
             mem_embeds,
             input_ids,
             token_accuracy,
@@ -211,7 +209,6 @@ def main():
                 "train/total_loss": total_loss.detach().item(),
                 "train/ce_loss": ce_loss.detach().item(),
                 "train/encoder_kl_loss": encoder_kl_loss.detach().item(),
-                "train/decoder_kl_loss": decoder_kl_loss.detach().item(),
                 "train/token_accuracy": token_accuracy.detach().item(),
                 "train/mem_embeds_mean": mem_embeds_mean.detach().item(),
                 "train/mem_embeds_std": mem_embeds_std.detach().item(),
@@ -229,7 +226,6 @@ def main():
                 f"[{current_step}/{args.training_steps}] total_loss: {total_loss.detach().item():.4f}; "
                 f"ce_loss: {ce_loss.detach().item():.4f}; "
                 f"encoder_kl_loss: {encoder_kl_loss.detach().item():.4f}; "
-                f"decoder_kl_loss: {decoder_kl_loss.detach().item():.4f}; "
                 f"token_accuracy: {token_accuracy.detach().item():.4f}; "
                 f"{TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
             )
