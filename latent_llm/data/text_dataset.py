@@ -98,12 +98,18 @@ class RandomTokenDataset(Dataset):
         random_text = "".join(
             random.choice(self.all_chars) for _ in range(self.block_size * 5)
         )
-        random_ids = self.tokenizer(random_text).input_ids
-        random_ids = random_ids[: self.block_size]
-        random_ids[0, :] = self.tokenizer.eos_token_id
-        random_ids[0, self.block_size - 1] = self.tokenizer.pad_token_id
+        random_ids = self.tokenizer(
+            random_text,
+            return_tensors="pt",
+            padding="max_length",
+            truncation=True,
+            max_length=self.block_size,
+        ).input_ids
 
-        return random_ids
+        n_tokens = self.block_size - 1
+        random_ids[0, n_tokens:] = self.tokenizer.pad_token_id
+        random_ids[0, n_tokens - 1] = self.tokenizer.eos_token_id
+        return random_ids.squeeze(0)
 
 
 if __name__ == "__main__":
