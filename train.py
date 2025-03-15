@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
     parser.add_argument("--encoder_kl_weight", type=float, default=1e-4)
     parser.add_argument("--decoder_kl_weight", type=float, default=1e-4)
-    parser.add_argument("--use_normalization", type=bool, default=False)
+    parser.add_argument("--use_normalization", action="store_true", default=False)
     parser.add_argument("--debug", action="store_true", default=False)
     return parser.parse_args()
 
@@ -180,7 +180,7 @@ def main():
         TRAIN_PARAMS,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
-        # betas=(0.9, 0.95),
+        betas=(0.9, 0.95),
     )
 
     ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
