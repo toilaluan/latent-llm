@@ -101,18 +101,19 @@ class LatentEncoder(nn.Module):
         """
         Compute KL divergence between the latent distribution and standard normal
         Input shapes: (batch_size, n_gist_tokens, hidden_size)
-        Output shape: scalar (averaged over batch and tokens, summed over hidden dimensions)
+        Output shape: scalar (averaged over batch, summed over latent dimensions)
         """
-        # Calculate KL divergence per token
-        # Shape: (batch_size, n_gist_tokens, hidden_size)
-        kl_per_element = 0.5 * (mean.pow(2) + logvar.exp() - logvar - 1)
+        # Reshape to combine n_gist_tokens and hidden_size dimensions for proper summing
+        batch_size = mean.size(0)
+        reshaped_mean = mean.reshape(batch_size, -1)
+        reshaped_logvar = logvar.reshape(batch_size, -1)
 
-        # Sum over hidden dimensions, then average over tokens and batch
-        # First sum over hidden dimension
-        kl_per_token = torch.sum(kl_per_element, dim=-1)  # (batch_size, n_gist_tokens)
-
-        # Then average over tokens and batch
-        return torch.mean(kl_per_token)
+        # Calculate KL divergence components
+        kl_per_batch = (
+            1 + reshaped_logvar - reshaped_mean.pow(2) - reshaped_logvar.exp()
+        )
+        # Sum over latent dimensions and average over batch
+        return -0.5 * torch.mean(torch.sum(kl_per_batch, dim=1))
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
@@ -278,7 +279,6 @@ class LatentDecoder(nn.Module):
         n_gist_tokens: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
-        kl_weight: float = 1e-4,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -287,46 +287,7 @@ class LatentDecoder(nn.Module):
         self.base_config = self.model.config
         self.mem_size = n_gist_tokens
         self.block_size = block_size
-        self.kl_weight = kl_weight
-
-        # Add parameters for VAE in decoder
-        self.embeds_logvar = nn.Parameter(
-            torch.zeros(
-                self.model.config.vocab_size,
-                self.base_config.hidden_size,
-                dtype=torch_dtype,
-            )
-        )
-
         self.init_position_ids()
-        self.init_weights()
-
-    def init_weights(self):
-        torch.nn.init.zeros_(self.embeds_logvar)
-
-    def reparameterize(self, mean, logvar):
-        """
-        Reparameterization trick: sample from a standard normal and scale by
-        standard deviation and shift by mean for backpropagation.
-        """
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mean + eps * std
-
-    def kl_divergence(self, mean, logvar):
-        """
-        Compute KL divergence between the latent distribution and standard normal
-        Input shapes: (batch_size, seq_len, hidden_size)
-        Output shape: scalar (averaged over batch and tokens, summed over hidden dimensions)
-        """
-        # Calculate KL divergence per token
-        kl_per_element = 0.5 * (mean.pow(2) + logvar.exp() - logvar - 1)
-
-        # Sum over hidden dimensions, then average over tokens and batch
-        kl_per_token = torch.sum(kl_per_element, dim=-1)  # (batch_size, seq_len)
-
-        # Then average over tokens and batch
-        return torch.mean(kl_per_token)
 
     def init_position_ids(self):
         mem_pos_step = max(self.block_size // self.mem_size, 1)
@@ -350,19 +311,7 @@ class LatentDecoder(nn.Module):
         B, T = input_ids.size()
         logger.debug(f"input_ids: {input_ids[0]}")
         logger.debug(f"mem shape: {mem_embeds.shape}")
-
-        # Get embeddings as mean
-        mean_embeds = self.model.get_input_embeddings()(input_ids)
-
-        # Get logvar for these tokens
-        token_logvars = F.embedding(input_ids, self.embeds_logvar)
-
-        # Apply reparameterization trick
-        embeds = self.reparameterize(mean_embeds, token_logvars)
-
-        # Calculate KL divergence
-        kl_loss = self.kl_divergence(mean_embeds, token_logvars) * self.kl_weight
-
+        embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
                 mem_embeds,
@@ -382,7 +331,7 @@ class LatentDecoder(nn.Module):
         # label map: [x a b c] -> [a b c d]
         logits = logits[:, mem_embeds.size(1) - 1 : -1, :]
         if labels is not None:
-            ce_loss = F.cross_entropy(
+            loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
                 labels.reshape(-1),
                 ignore_index=ignore_index,
@@ -396,9 +345,9 @@ class LatentDecoder(nn.Module):
                 torch.sum(correct_tokens).float() / torch.sum(valid_tokens).float()
             )
 
-            return logits, ce_loss, kl_loss, accuracy
+            return logits, loss, accuracy
 
-        return logits, None, kl_loss, None
+        return logits, None, None
 
     def generate(
         self,
@@ -449,12 +398,8 @@ class LatentDecoder(nn.Module):
             else:
                 generated_ids = torch.cat([generated_ids, next_token], dim=1)
 
-            # Get embeddings with reparameterization
-            mean_embeds = self.model.get_input_embeddings()(next_token)
-            token_logvars = F.embedding(next_token, self.embeds_logvar)
-            next_token_embeds = self.reparameterize(mean_embeds, token_logvars)
-
             # Update input embeddings for next iteration
+            next_token_embeds = self.model.get_input_embeddings()(next_token)
             embeds = torch.cat([embeds, next_token_embeds], dim=1)
 
             # Update attention mask
