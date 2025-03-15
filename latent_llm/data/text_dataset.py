@@ -50,36 +50,6 @@ class TextDataset(Dataset):
         return input_ids.squeeze(0)
 
 
-class RandomTextDataset(Dataset):
-    def __init__(self, model_name: str, block_size: int = 1024):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-        self.block_size = block_size
-        self.mnemo = Mnemonic("english")
-
-    def _random_long_text(self) -> str:
-        return " ".join(self._random_text() for _ in range(random.randint(1, 32)))
-
-    def _random_text(self) -> str:
-        return self.mnemo.generate(strength=256)
-
-    def __len__(self):
-        return 100_000_000  # Arbitrary large number to simulate an unlimited dataset
-
-    def __getitem__(self, idx):
-        text = self._random_long_text()
-        input_ids = self.tokenizer(
-            text,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=self.block_size,
-        ).input_ids
-        n_tokens = 1 + int((self.block_size - 1) * np.random.beta(1, 5))
-        input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
-        return input_ids.squeeze(0)
-
-
 class RandomTokenDataset(Dataset):
     def __init__(self, model_name: str, block_size: int = 1024):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -112,7 +82,11 @@ class RandomTokenDataset(Dataset):
         else:
             n_tokens = self.block_size
         random_ids[0, n_tokens:] = self.tokenizer.pad_token_id
-        random_ids[0, n_tokens - 1] = self.tokenizer.eos_token_id
+        random_ids[0, n_tokens - 1] = (
+            self.tokenizer.eos_token_id
+            if random_ids[0, n_tokens - 1] != self.tokenizer.pad_token_id
+            else self.tokenizer.pad_token_id
+        )
         return random_ids.squeeze(0)
 
 
