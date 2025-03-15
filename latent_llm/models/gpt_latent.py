@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 # Add this code to enable debug logging
-def enable_debug_logging():
+def _enable_debug_logging():
     """Configure logging to show debug messages."""
     logging.basicConfig(
         level=logging.DEBUG,
@@ -68,7 +68,7 @@ class LatentEncoder(nn.Module):
         self.init_position_ids()
         self.enable_debug_logging = enable_debug_logging
         if enable_debug_logging:
-            enable_debug_logging()
+            _enable_debug_logging()
 
     def init_position_ids(self):
         mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)
