@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument("--use-grad-norm", type=bool, default=True)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=8)
     parser.add_argument("--seed", type=int, default=42)
@@ -235,7 +236,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
             # Generate completion
             generated_ids = decoder.generate(
                 latent_embeds,
-                max_new_tokens=args.max_new_tokens,
+                max_new_tokens=encoder.block_size,
             )[0].tolist()
 
             # Calculate completion accuracy
@@ -369,6 +370,8 @@ def main():
             }
         )
         accelerator.backward(total_loss)
+        if args.use_grad_norm:
+            accelerator.clip_grad_norm_(train_params, args.max_grad_norm)
         optimizer.step()
         processed_tokens += args.block_size * args.batch_size
         token_per_second = processed_tokens / (time.time() - start_time)
