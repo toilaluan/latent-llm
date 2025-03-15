@@ -39,9 +39,7 @@ def parse_args():
     parser.add_argument("--split", type=str, default="train")
     parser.add_argument("--block_size", type=int, default=256)
     parser.add_argument("--n_gist_tokens", type=int, default=256)
-    parser.add_argument(
-        "--hub_repo_id", type=str, default=""
-    )
+    parser.add_argument("--hub_repo_id", type=str, default="")
     parser.add_argument("--learning_rate", type=float, default=2.5e-4)
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
@@ -164,7 +162,7 @@ def main():
         TRAIN_PARAMS,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
-        betas=(0.9, 0.95),
+        # betas=(0.9, 0.95),
     )
 
     ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
