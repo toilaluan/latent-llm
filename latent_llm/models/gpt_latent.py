@@ -7,6 +7,9 @@ import os
 from huggingface_hub import HfApi
 from huggingface_hub import snapshot_download
 from safetensors.torch import save_file, load_file
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 CKPT_DIR = ".training_cache/checkpoints"
@@ -99,12 +102,10 @@ class LatentEncoder(nn.Module):
         self, input_ids: torch.Tensor, pad_token_id: int
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         B = input_ids.size(0)
+        logging.debug(f"input_ids: {input_ids}")
         embeds = self.model.get_input_embeddings()(input_ids)
-        position_ids = self.position_ids[: embeds.size(1) + self.n_gist_tokens].repeat(
-            B, 1
-        )
         masks = (input_ids != pad_token_id).to(dtype=torch.int64)
-
+        logging.debug(f"masks: {masks}")
         # Use gist_tokens_mean as initial tokens for model processing
         gist_tokens = self.gist_tokens_mean.unsqueeze(0).expand(B, -1, -1)
 
@@ -115,7 +116,10 @@ class LatentEncoder(nn.Module):
             ],
             dim=1,
         )
+        position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
         masks = torch.cat([masks, self.gist_masks.repeat(B, 1)], dim=1)
+        logging.debug(f"position_ids: {position_ids}")
+        logging.debug(f"concatenated masks: {masks}")
 
         last_hidden_states = self.model(
             inputs_embeds=embeds,
@@ -130,10 +134,12 @@ class LatentEncoder(nn.Module):
         # For VAE, we interpret these as parameters of the distribution
         mean = gisted_hidden
         logvar = self.gist_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
+        logging.debug(f"mean: {mean}")
+        logging.debug(f"logvar: {logvar}")
 
         # Calculate KL divergence
         kl_loss = self.kl_divergence(mean, logvar) * self.kl_weight
-
+        logging.debug(f"kl_loss: {kl_loss}")
         # Sample latent vectors using reparameterization trick
         gisted_embeds = self.reparameterize(mean, logvar)
 
@@ -286,6 +292,8 @@ class LatentDecoder(nn.Module):
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
+        logging.debug(f"input_ids: {input_ids}")
+        logging.debug(f"mem shape: {mem_embeds.shape}")
         embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
@@ -294,10 +302,12 @@ class LatentDecoder(nn.Module):
             ],
             dim=1,
         )
+        logging.debug(f"embeds shape: {embeds.shape}")
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
+        logging.debug(f"position_ids shape: {position_ids.shape}")
         logits = self.model(
             inputs_embeds=embeds,
-            position_ids=position_ids,
+            # position_ids=position_ids,
         ).logits
         # labels = [a b c d], mem_embeds = [m m m m]
         # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
@@ -348,7 +358,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
-                position_ids=position_ids,
+                # position_ids=position_ids,
             )
             logits = outputs.logits[:, -1, :]
             # Apply temperature scaling
