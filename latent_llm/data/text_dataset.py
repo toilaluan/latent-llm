@@ -66,7 +66,7 @@ class RandomTokenDataset(Dataset):
         # Generate random token IDs within the vocabulary range
         # Exclude special tokens by using a range from 100 to vocab_size-1
         random_text = "".join(
-            random.choice(self.all_chars) for _ in range(self.block_size * 5)
+            random.choice(self.all_chars) for _ in range(self.block_size * 10)
         )
         random_ids = self.tokenizer(
             random_text,
@@ -74,6 +74,7 @@ class RandomTokenDataset(Dataset):
             padding="max_length",
             truncation=True,
             max_length=self.block_size,
+            add_eos_token=True,
         ).input_ids
         if random.random() < 0.1:
             n_tokens = random.randint(1, self.block_size // 2 + 1)
@@ -81,12 +82,7 @@ class RandomTokenDataset(Dataset):
             n_tokens = random.randint(self.block_size // 2 + 1, self.block_size - 1)
         else:
             n_tokens = self.block_size
-        random_ids[0, n_tokens:] = self.tokenizer.pad_token_id
-        random_ids[0, n_tokens - 1] = (
-            self.tokenizer.eos_token_id
-            if random_ids[0, n_tokens - 1] != self.tokenizer.pad_token_id
-            else self.tokenizer.pad_token_id
-        )
+        random_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return random_ids.squeeze(0)
 
 
