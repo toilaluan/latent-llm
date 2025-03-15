@@ -118,7 +118,7 @@ class LatentEncoder(nn.Module):
         ).hidden_states[-1]
 
         # Get the hidden states for gist tokens
-        latents = last_hidden_states[:, -self.latent_size - 1 : -1, :]
+        latents = last_hidden_states[:, -self.latent_size :, :]
 
         logvar = self.latent_tokens_logvar.repeat(B, 1, 1)
 
@@ -134,7 +134,7 @@ class LatentEncoder(nn.Module):
         self.model.push_to_hub(repo_id)
 
         folder = os.path.dirname(f"{ckpt_dir}/{repo_id}")
-        os.makedirs(folder, exist_ok=True)
+        os.makedirs(folder)
 
         # Save tensors using safetensors
         tensors = {
@@ -282,8 +282,8 @@ class LatentDecoder(nn.Module):
         context_embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
-                context_embeds,
                 latent_embeds,
+                context_embeds,
             ],
             dim=1,
         )
