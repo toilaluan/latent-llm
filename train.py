@@ -122,6 +122,7 @@ def main():
         lora_target_modules=(
             args.lora_target_modules.split(",") if args.lora_target_modules else None
         ),
+        kl_weight=args.kl_weight,
     )
     DECODER = LatentDecoder(
         model_name=args.model_name,
