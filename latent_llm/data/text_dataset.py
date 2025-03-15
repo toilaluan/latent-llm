@@ -44,9 +44,6 @@ class TextDataset(Dataset):
             max_length=self.block_size,
             add_special_tokens=True,
         ).input_ids
-        n_tokens = self.block_size - 1
-        input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
-        input_ids[0, n_tokens - 1] = self.tokenizer.eos_token_id
         return input_ids.squeeze(0)
 
 

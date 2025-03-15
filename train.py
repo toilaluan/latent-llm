@@ -117,9 +117,11 @@ def setup_tokenizer(args):
 def setup_datasets(args, tokenizer):
     """Setup training and validation datasets."""
     # Always use RandomTokenDataset for training
-    train_dataset = RandomTokenDataset(
+    train_dataset = TextDataset(
         model_name=args.model_name,
         block_size=args.block_size,
+        dataset_id=args.dataset_id,
+        split="train",
     )
     logger.info(f"Training sample: {train_dataset[0]}")
     train_dataloader = DataLoader(
@@ -129,9 +131,11 @@ def setup_datasets(args, tokenizer):
     )
     train_dataloader = cycle(train_dataloader)
 
-    val_dataset = RandomTokenDataset(
+    val_dataset = TextDataset(
         model_name=args.model_name,
         block_size=args.block_size,
+        dataset_id=args.dataset_id,
+        split="train",
     )
     val_dataloader = DataLoader(
         val_dataset,
@@ -346,11 +350,10 @@ def main():
     tokenizer = setup_tokenizer(args)
     train_dataloader, val_dataloader = setup_datasets(args, tokenizer)
 
-    # Log parameter counts
-    log_parameter_counts(encoder, decoder)
-
     for p in decoder.parameters():
         p.requires_grad = False
+    # Log parameter counts
+    log_parameter_counts(encoder, decoder)
 
     # Setup optimizer
     train_params = []
