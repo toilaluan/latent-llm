@@ -67,6 +67,8 @@ class LatentEncoder(nn.Module):
         self.init_weights()
         self.init_position_ids()
         self.enable_debug_logging = enable_debug_logging
+        if enable_debug_logging:
+            enable_debug_logging()
 
     def init_position_ids(self):
         mem_pos_step = max(self.block_size // self.n_gist_tokens, 1)
