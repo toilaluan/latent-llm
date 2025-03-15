@@ -302,13 +302,12 @@ class LatentDecoder(nn.Module):
         self.init_position_ids()
 
     def init_position_ids(self):
-        # Create position IDs: 1 for memory tokens, 2 for all other tokens
-        memory_position_ids = torch.ones(self.mem_size, dtype=torch.long)
-        content_position_ids = torch.full((self.block_size,), 2, dtype=torch.long)
+        mem_pos_step = max(self.block_size // self.mem_size, 1)
+        memory_position_ids = torch.arange(self.mem_size) * mem_pos_step
         position_ids = torch.cat(
             [
                 memory_position_ids,
-                content_position_ids,
+                torch.arange(self.block_size),
             ],
             dim=0,
         )
@@ -333,7 +332,7 @@ class LatentDecoder(nn.Module):
         position_ids = self.position_ids[: embeds.size(1)].repeat(B, 1)
         logits = self.model(
             inputs_embeds=embeds,
-            position_ids=position_ids,
+            # position_ids=position_ids,
         ).logits
         # labels = [a b c d], mem_embeds = [m m m m]
         # input_ids: [m m m m a b c d] -> predicts [x x x x a b c d]
@@ -383,7 +382,7 @@ class LatentDecoder(nn.Module):
             outputs = self.model(
                 inputs_embeds=embeds,
                 attention_mask=attention_mask,
-                position_ids=position_ids,
+                # position_ids=position_ids,
             )
             logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
 
