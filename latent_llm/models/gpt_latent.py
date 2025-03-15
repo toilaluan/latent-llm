@@ -133,15 +133,16 @@ class LatentEncoder(nn.Module):
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
         self.model.push_to_hub(repo_id)
 
-        folder = os.path.dirname(f"{ckpt_dir}/{repo_id}")
-        os.makedirs(folder)
+        # Create full directory path for the checkpoint
+        full_ckpt_path = os.path.join(ckpt_dir, repo_id)
+        os.makedirs(full_ckpt_path, exist_ok=True)
 
         # Save tensors using safetensors
         tensors = {
             "latent_tokens_mean": self.latent_tokens_mean.data,
             "latent_tokens_logvar": self.latent_tokens_logvar.data,
         }
-        save_path = f"{ckpt_dir}/{repo_id}/latent_tokens.safetensors"
+        save_path = os.path.join(full_ckpt_path, "latent_tokens.safetensors")
         save_file(tensors, save_path)
 
         # Save configuration parameters
@@ -152,7 +153,7 @@ class LatentEncoder(nn.Module):
         }
         import json
 
-        config_path = f"{ckpt_dir}/{repo_id}/latent_config.json"
+        config_path = os.path.join(full_ckpt_path, "latent_config.json")
         with open(config_path, "w") as f:
             json.dump(config, f)
 
