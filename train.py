@@ -234,8 +234,8 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
                 labels=val_sample,
                 ignore_index=tokenizer.pad_token_id,
             )
-            latent_mean = latent_embeds.mean()
-            latent_std = latent_embeds.std()
+            latent_mean = latent_embeds[0, :, :].mean()
+            latent_std = latent_embeds[0, :, :].std()
             logger.info(
                 f"latent_mean: {latent_mean.item():.4f}; latent_std: {latent_std.item():.4f}"
             )
@@ -270,13 +270,12 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
             val_completion_accuracy += sample_completion_acc
             val_completion_accuracy_rep += sample_completion_acc_rep
         # Average metrics
-        val_samples = len(val_dataloader)
-        val_total_loss /= val_samples
-        val_rec_loss /= val_samples
-        val_kl_loss /= val_samples
-        val_token_accuracy /= val_samples
-        val_completion_accuracy /= val_samples
-        val_completion_accuracy_rep /= val_samples
+        val_total_loss /= n_samples
+        val_rec_loss /= n_samples
+        val_kl_loss /= n_samples
+        val_token_accuracy /= n_samples
+        val_completion_accuracy /= n_samples
+        val_completion_accuracy_rep /= n_samples
         # Log validation metrics
         wandb.log(
             {
@@ -290,7 +289,6 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
         )
 
         # Log a sample completion
-        sample_idx = 0
         completion = tokenizer.decode(generated_ids)
         completion_rep = tokenizer.decode(rep_generated_ids)
         label = tokenizer.decode(target_ids)
