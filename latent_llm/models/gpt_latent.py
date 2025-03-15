@@ -115,7 +115,7 @@ class LatentEncoder(nn.Module):
         logger.debug(f"attention_mask: {attention_mask[0]}")
 
         attention_mask = torch.cat(
-            [attention_mask, torch.ones_like(self.gist_tokens_mean.size(1))], dim=1
+            [attention_mask, torch.ones(B, self.gist_tokens_mean.size(1))], dim=1
         )
 
         embeds = self.model.get_input_embeddings()(input_ids)
