@@ -375,8 +375,8 @@ def main():
         total_loss, rec_loss, kl_loss, latent_embeds, input_ids, token_accuracy = (
             training_step(encoder, decoder, batch, tokenizer, DEVICE)
         )
-        latent_embeds_mean = latent_embeds.mean()
-        latent_embeds_std = latent_embeds.std()
+        latent_embeds_mean = latent_embeds[0, :, :].mean()
+        latent_embeds_std = latent_embeds[0, :, :].std()
         wandb.log(
             {
                 "train/total_loss": total_loss.item(),
