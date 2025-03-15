@@ -95,7 +95,13 @@ class RandomTokenDataset(Dataset):
     def __getitem__(self, idx):
         # Generate random token IDs within the vocabulary range
         # Exclude special tokens by using a range from 100 to vocab_size-1
-        random_ids = torch.randint(0, len(self.ids), (self.block_size,))
+        random_text = "".join(
+            random.choice(self.all_chars) for _ in range(self.block_size * 5)
+        )
+        random_ids = self.tokenizer(random_text).input_ids
+        random_ids = random_ids[: self.block_size]
+        random_ids[0, :] = self.tokenizer.eos_token_id
+        random_ids[0, self.block_size - 1] = self.tokenizer.pad_token_id
 
         return random_ids
 
