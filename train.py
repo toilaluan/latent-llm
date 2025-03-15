@@ -149,6 +149,7 @@ def main():
 
     # ENCODER.forward = torch.compile(ENCODER.forward)
     # DECODER.forward = torch.compile(DECODER.forward)
+    training_step = torch.compile(training_step)
 
     # Log the number of parameters
     encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
