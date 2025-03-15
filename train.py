@@ -121,12 +121,12 @@ def main():
         )
 
         # Get decoder outputs - now includes decoder KL loss
-        logits, ce_loss, decoder_kl_loss, token_accuracy = DECODER(
+        logits, ce_loss, token_accuracy = DECODER(
             input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
 
         # Combine all losses
-        total_loss = ce_loss + encoder_kl_loss + decoder_kl_loss
+        total_loss = ce_loss + encoder_kl_loss
 
         return (
             total_loss,
