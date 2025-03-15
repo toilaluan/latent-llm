@@ -129,21 +129,18 @@ def setup_datasets(args, tokenizer):
     )
     train_dataloader = cycle(train_dataloader)
 
-    # Use TextDataset for validation
-    val_dataset = TextDataset(
-        dataset_id=args.dataset_id,
-        split="train",
-        block_size=args.block_size,
+    val_dataset = RandomTokenDataset(
         model_name=args.model_name,
+        block_size=args.block_size,
     )
-    logger.info(f"Validation sample: {val_dataset[0]}")
+    val_dataloader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+    )
+    val_dataloader = cycle(val_dataloader)
 
-    # Create a fixed validation set with n samples
-    val_samples = min(args.val_samples, len(val_dataset))
-    val_indices = list(range(val_samples))
-    val_data = [train_dataset[i] for i in val_indices]
-
-    return train_dataloader, val_data
+    return train_dataloader, val_dataloader
 
 
 def calculate_completion_accuracy(generated_ids, target_ids):
@@ -206,21 +203,25 @@ def log_parameter_counts(encoder, decoder):
     )
 
 
-def validate(encoder, decoder, val_data, tokenizer, args):
+def validate(encoder, decoder, val_dataloader, tokenizer, args):
     """Run validation and log metrics."""
     encoder.eval()
     decoder.eval()
-
+    n_samples = 4
     val_total_loss = 0.0
     val_rec_loss = 0.0
     val_kl_loss = 0.0
     val_token_accuracy = 0.0
     val_completion_accuracy = 0.0
     val_completion_accuracy_rep = 0.0
+    i = 0
     with torch.no_grad():
         # Process validation samples
-        for val_sample in val_data:
-            val_sample = val_sample.unsqueeze(0).to(DEVICE)
+        for batch in val_dataloader:
+            if i >= n_samples:
+                break
+            i += 1
+            val_sample = batch.to(DEVICE)
 
             # Get latent representation
             rep_latent_embeds, kl_loss, latent_embeds = encoder(
@@ -241,7 +242,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
 
             # Generate completion from reparametrized latent embeddings
             rep_generated_ids = decoder.generate(
-                rep_latent_embeds,
+                rep_latent_embeds[:1],
                 max_new_tokens=encoder.block_size,
             )[0].tolist()
 
@@ -253,7 +254,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
 
             # Generate completion from original latent embeddings
             generated_ids = decoder.generate(
-                latent_embeds,
+                latent_embeds[:1],
                 max_new_tokens=encoder.block_size,
             )[0].tolist()
 
@@ -269,7 +270,7 @@ def validate(encoder, decoder, val_data, tokenizer, args):
             val_completion_accuracy += sample_completion_acc
             val_completion_accuracy_rep += sample_completion_acc_rep
         # Average metrics
-        val_samples = len(val_data)
+        val_samples = len(val_dataloader)
         val_total_loss /= val_samples
         val_rec_loss /= val_samples
         val_kl_loss /= val_samples
@@ -345,7 +346,7 @@ def main():
     # Setup models, tokenizer and datasets
     encoder, decoder = setup_models(args)
     tokenizer = setup_tokenizer(args)
-    train_dataloader, val_data = setup_datasets(args, tokenizer)
+    train_dataloader, val_dataloader = setup_datasets(args, tokenizer)
 
     # Log parameter counts
     log_parameter_counts(encoder, decoder)
@@ -410,7 +411,7 @@ def main():
             and current_step % args.validating_interval == 0
         ):
             logger.info("Validating...")
-            validate(encoder, decoder, val_data, tokenizer, args)
+            validate(encoder, decoder, val_dataloader, tokenizer, args)
             start_time = time.time()  # Reset timer after validation
 
         current_step += 1
