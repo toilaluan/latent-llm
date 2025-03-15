@@ -5,6 +5,7 @@ import os
 import numpy as np
 import random
 from mnemonic import Mnemonic
+import torch
 
 
 CACHE_DIR = ".training_cache/data"
@@ -77,6 +78,26 @@ class RandomTextDataset(Dataset):
         n_tokens = 1 + int((self.block_size - 1) * np.random.beta(1, 5))
         input_ids[0, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
+
+
+class RandomTokenDataset(Dataset):
+    def __init__(self, model_name: str, block_size: int = 1024):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        self.block_size = block_size
+        self.vocab_size = len(self.tokenizer)
+        self.all_chars = list("abcdefghijklmnopqrstuvwxyz0123456789")
+        self.ids = [self.tokenizer.vocab[c] for c in self.all_chars]
+
+    def __len__(self):
+        return 100_000_000  # Arbitrary large number to simulate an unlimited dataset
+
+    def __getitem__(self, idx):
+        # Generate random token IDs within the vocabulary range
+        # Exclude special tokens by using a range from 100 to vocab_size-1
+        random_ids = torch.randint(0, len(self.ids), (self.block_size,))
+
+        return random_ids
 
 
 if __name__ == "__main__":
