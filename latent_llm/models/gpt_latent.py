@@ -304,7 +304,6 @@ class LatentDecoder(nn.Module):
                 ignore_index=ignore_index,
                 reduction="none",
             )
-            print(max(loss), min(loss))
             loss = loss.mean()
 
             # Calculate token accuracy
