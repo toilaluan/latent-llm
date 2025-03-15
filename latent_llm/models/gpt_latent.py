@@ -101,19 +101,18 @@ class LatentEncoder(nn.Module):
         """
         Compute KL divergence between the latent distribution and standard normal
         Input shapes: (batch_size, n_gist_tokens, hidden_size)
-        Output shape: scalar (averaged over batch, summed over latent dimensions)
+        Output shape: scalar (averaged over batch and tokens, summed over hidden dimensions)
         """
-        # Reshape to combine n_gist_tokens and hidden_size dimensions for proper summing
-        batch_size = mean.size(0)
-        reshaped_mean = mean.reshape(batch_size, -1)
-        reshaped_logvar = logvar.reshape(batch_size, -1)
+        # Calculate KL divergence per token
+        # Shape: (batch_size, n_gist_tokens, hidden_size)
+        kl_per_element = 0.5 * (mean.pow(2) + logvar.exp() - logvar - 1)
 
-        # Calculate KL divergence components
-        kl_per_batch = (
-            1 + reshaped_logvar - reshaped_mean.pow(2) - reshaped_logvar.exp()
-        )
-        # Sum over latent dimensions and average over batch
-        return -0.5 * torch.mean(torch.sum(kl_per_batch, dim=1))
+        # Sum over hidden dimensions, then average over tokens and batch
+        # First sum over hidden dimension
+        kl_per_token = torch.sum(kl_per_element, dim=-1)  # (batch_size, n_gist_tokens)
+
+        # Then average over tokens and batch
+        return torch.mean(kl_per_token)
 
     def forward(
         self, input_ids: torch.Tensor, pad_token_id: int
