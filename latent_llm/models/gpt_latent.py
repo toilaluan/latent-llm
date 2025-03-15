@@ -315,7 +315,6 @@ class LatentDecoder(nn.Module):
         self,
         latent_embeds: torch.Tensor,
         max_new_tokens: int,
-        temperature: float = 0.01,
         **kwargs,
     ) -> torch.Tensor:
         """Generate text using a more efficient approach with temperature sampling."""
@@ -324,9 +323,6 @@ class LatentDecoder(nn.Module):
         device = self.model.device
         generated_ids = torch.zeros((B, 0), dtype=torch.long, device=device)
         # Create attention mask (1 for all tokens)
-        attention_mask = torch.ones(
-            (B, latent_embeds.size(1)), dtype=torch.long, device=device
-        )
         max_new_tokens = min(
             max_new_tokens, self.position_ids.size(0) - latent_embeds.size(1)
         )
@@ -336,9 +332,8 @@ class LatentDecoder(nn.Module):
             # Forward pass
             outputs = self.model(
                 inputs_embeds=embeds,
-                attention_mask=attention_mask,
             )
-            logits = outputs.logits[:, -1, :] / max(temperature, 1e-7)
+            logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(logits, dim=-1)
 
             # Stop if all sequences have EOS
@@ -355,12 +350,6 @@ class LatentDecoder(nn.Module):
             # Update input embeddings for next iteration
             next_token_embeds = self.model.get_input_embeddings()(next_token)
             embeds = torch.cat([embeds, next_token_embeds], dim=1)
-
-            # Update attention mask
-            attention_mask = torch.cat(
-                [attention_mask, torch.ones((B, 1), dtype=torch.long, device=device)],
-                dim=1,
-            )
         return generated_ids
 
     def push_to_hub(self, repo_id: str):
