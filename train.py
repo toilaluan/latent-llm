@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import torch
 from latent_llm.data.text_dataset import (
     TextDataset,
-    RandomTextDataset,
     RandomTokenDataset,
 )
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
@@ -40,8 +39,12 @@ def parse_args():
         "--dataset_id", type=str, default="BEE-spoke-data/fineweb-100k_en-med"
     )
     parser.add_argument("--split", type=str, default="train")
+    parser.add_argument("--val_split", type=str, default="validation")
+    parser.add_argument(
+        "--val_samples", type=int, default=10, help="Number of validation samples"
+    )
     parser.add_argument("--block_size", type=int, default=256)
-    parser.add_argument("--n_gist_tokens", type=int, default=256)
+    parser.add_argument("--latent_size", type=int, default=256)
     parser.add_argument(
         "--hub_repo_id", type=str, default="toilaluan/smol-lm-2-135m-latent-encoder"
     )
@@ -63,127 +66,118 @@ def parse_args():
     parser.add_argument("--log_interval", type=int, default=10)
     parser.add_argument("--validating_interval", type=int, default=100)
     parser.add_argument("--save_interval", type=int, default=1_000)
-    parser.add_argument("--max_new_tokens", type=int, default=512)
     parser.add_argument("--training_steps", type=int, default=100_000)
     parser.add_argument("--wandb_project", type=str, default="latent-llm")
-    parser.add_argument("--limit", type=int, default=-1)
-    parser.add_argument("--freeze_decoder", default=False, action="store_true")
-    # LoRA arguments
-    parser.add_argument(
-        "--use_lora",
-        default=False,
-        action="store_true",
-        help="Use PEFT LoRA for fine-tuning",
-    )
-    parser.add_argument(
-        "--lora_r", type=int, default=8, help="Rank of LoRA adaptation matrices"
-    )
-    parser.add_argument(
-        "--lora_alpha", type=int, default=16, help="LoRA scaling factor"
-    )
-    parser.add_argument(
-        "--lora_dropout",
-        type=float,
-        default=0.05,
-        help="Dropout probability for LoRA layers",
-    )
-    parser.add_argument(
-        "--lora_target_modules",
-        type=str,
-        default="q_proj,v_proj",
-        help="Comma-separated list of modules to apply LoRA to",
-    )
     parser.add_argument(
         "--kl_weight",
         type=float,
         default=0.00001,
         help="Weight for KL divergence loss",
     )
+    parser.add_argument(
+        "--attn_implementation",
+        type=str,
+        default="flash_attention_2",
+        help="Attention implementation to use",
+    )
     return parser.parse_args()
 
 
-def main():
-    args = parse_args()
-
-    wandb.init(project=args.wandb_project)
-
-    print("--- Training Config ---")
-    logger.info(args)
-    print("---")
-
-    ENCODER = LatentEncoder(
+def setup_models(args):
+    """Initialize and configure encoder and decoder models."""
+    encoder = LatentEncoder(
         model_name=args.model_name,
-        n_gist_tokens=args.n_gist_tokens,
+        latent_size=args.latent_size,
         block_size=args.block_size,
-        use_lora=args.use_lora,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        lora_target_modules=(
-            args.lora_target_modules.split(",") if args.lora_target_modules else None
-        ),
         kl_weight=args.kl_weight,
+        attn_implementation=args.attn_implementation,
     )
-    DECODER = LatentDecoder(
+    decoder = LatentDecoder(
         model_name=args.model_name,
-        n_gist_tokens=args.n_gist_tokens,
+        latent_size=args.latent_size,
         block_size=args.block_size,
+        attn_implementation=args.attn_implementation,
     )
 
-    TOKENIZER = AutoTokenizer.from_pretrained(args.model_name)
+    return encoder, decoder
+
+
+def setup_tokenizer(args):
+    """Setup and configure the tokenizer."""
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
     # Add new pad token
-    TOKENIZER.add_special_tokens({"pad_token": "<|pad|>"})
-    TOKENIZER.push_to_hub(args.hub_repo_id + "-encoder")
-    logger.info(f"pad_token: {TOKENIZER.pad_token}: {TOKENIZER.pad_token_id}")
-    logger.info(f"eos_token: {TOKENIZER.eos_token}: {TOKENIZER.eos_token_id}")
-    if args.dataset_type == "text":
-        DATASET = TextDataset(
-            dataset_id=args.dataset_id,
-            split=args.split,
-            block_size=args.block_size,
-            model_name=args.model_name,
-        )
-    else:
-        DATASET = RandomTokenDataset(
-            model_name=args.model_name,
-            block_size=args.block_size,
-        )
-    logger.info(f"sample: {DATASET[0]}")
-    DATALOADER = DataLoader(
-        DATASET,
+    tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+    tokenizer.push_to_hub(args.hub_repo_id + "-encoder")
+    logger.info(f"pad_token: {tokenizer.pad_token}: {tokenizer.pad_token_id}")
+    logger.info(f"eos_token: {tokenizer.eos_token}: {tokenizer.eos_token_id}")
+    return tokenizer
+
+
+def setup_datasets(args, tokenizer):
+    """Setup training and validation datasets."""
+    # Always use RandomTokenDataset for training
+    train_dataset = RandomTokenDataset(
+        model_name=args.model_name,
+        block_size=args.block_size,
+    )
+    logger.info(f"Training sample: {train_dataset[0]}")
+    train_dataloader = DataLoader(
+        train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
     )
-    DATALOADER = cycle(DATALOADER)
+    train_dataloader = cycle(train_dataloader)
 
-    def training_step(batch: torch.Tensor) -> torch.Tensor:
-        input_ids = batch.to(accelerator.device)
-        labels = batch.to(accelerator.device)
-        mem_embeds, kl_loss, _ = ENCODER(input_ids, pad_token_id=TOKENIZER.pad_token_id)
-        logits, loss, token_accuracy = DECODER(
-            input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
-        )
-        # Combine reconstruction loss with KL divergence loss
-        total_loss = loss + kl_loss
-        return total_loss, loss, kl_loss, mem_embeds, input_ids, token_accuracy
+    # Use TextDataset for validation
+    val_dataset = TextDataset(
+        dataset_id=args.dataset_id,
+        split=args.val_split,
+        block_size=args.block_size,
+        model_name=args.model_name,
+    )
+    logger.info(f"Validation sample: {val_dataset[0]}")
 
-    def count_parameters(model):
-        total_params = sum(p.numel() for p in model.parameters())
-        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        return trainable_params, total_params
+    # Create a fixed validation set with n samples
+    val_samples = min(args.val_samples, len(val_dataset))
+    val_indices = torch.randperm(len(val_dataset))[:val_samples]
+    val_data = [val_dataset[i] for i in val_indices]
 
-    current_step = 0
+    return train_dataloader, val_data
 
-    ENCODER.train()
-    DECODER.train()
 
-    if args.freeze_decoder:
-        for param in DECODER.parameters():
-            param.requires_grad = False
+def calculate_completion_accuracy(generated_ids, target_ids):
+    """Calculate token-level accuracy between generated and target sequences"""
+    min_len = min(len(generated_ids), len(target_ids))
+    matches = sum(1 for i in range(min_len) if generated_ids[i] == target_ids[i])
+    return matches / min_len if min_len > 0 else 0.0
 
-    # Log the number of parameters
-    encoder_trainable_params, encoder_total_params = count_parameters(ENCODER)
-    decoder_trainable_params, decoder_total_params = count_parameters(DECODER)
+
+def training_step(encoder, decoder, batch, tokenizer, device):
+    """Perform a single training step."""
+    input_ids = batch.to(device)
+    labels = batch.to(device)
+    latent_embeds, kl_loss, latents = encoder(
+        input_ids, pad_token_id=tokenizer.pad_token_id
+    )
+    logits, loss, token_accuracy = decoder(
+        input_ids, latent_embeds, labels=labels, ignore_index=tokenizer.pad_token_id
+    )
+    # Combine reconstruction loss with KL divergence loss
+    total_loss = loss + kl_loss
+    return total_loss, loss, kl_loss, latent_embeds, input_ids, token_accuracy
+
+
+def count_parameters(model):
+    """Count total and trainable parameters in a model."""
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return trainable_params, total_params
+
+
+def log_parameter_counts(encoder, decoder):
+    """Log parameter counts for encoder and decoder."""
+    encoder_trainable_params, encoder_total_params = count_parameters(encoder)
+    decoder_trainable_params, decoder_total_params = count_parameters(decoder)
 
     logger.info(
         f"Encoder: {encoder_trainable_params:,} trainable / {encoder_total_params:,} total parameters "
@@ -203,107 +197,207 @@ def main():
         }
     )
 
-    TRAIN_PARAMS = []
-    TRAIN_PARAMS.extend([p for p in ENCODER.parameters() if p.requires_grad])
-    TRAIN_PARAMS.extend([p for p in DECODER.parameters() if p.requires_grad])
+    return (
+        encoder_trainable_params,
+        encoder_total_params,
+        decoder_trainable_params,
+        decoder_total_params,
+    )
 
-    OPTIMIZER = torch.optim.AdamW(
-        TRAIN_PARAMS,
+
+def validate(encoder, decoder, val_data, tokenizer, args):
+    """Run validation and log metrics."""
+    encoder.eval()
+    decoder.eval()
+
+    val_total_loss = 0.0
+    val_rec_loss = 0.0
+    val_kl_loss = 0.0
+    val_token_accuracy = 0.0
+    val_completion_accuracy = 0.0
+
+    with torch.no_grad():
+        # Process validation samples
+        for val_sample in val_data:
+            val_sample = val_sample.unsqueeze(0).to(accelerator.device)
+
+            # Get latent representation
+            latent_embeds, kl_loss, latents = encoder(
+                val_sample, pad_token_id=tokenizer.pad_token_id
+            )
+
+            # Calculate reconstruction loss
+            logits, loss, token_acc = decoder(
+                val_sample,
+                latent_embeds,
+                labels=val_sample,
+                ignore_index=tokenizer.pad_token_id,
+            )
+
+            # Generate completion
+            generated_ids = decoder.generate(
+                latent_embeds,
+                max_new_tokens=args.max_new_tokens,
+            )[0].tolist()
+
+            # Calculate completion accuracy
+            target_ids = val_sample[0].tolist()
+            sample_completion_acc = calculate_completion_accuracy(
+                generated_ids, target_ids
+            )
+
+            # Accumulate metrics
+            val_total_loss += loss.item() + kl_loss.item()
+            val_rec_loss += loss.item()
+            val_kl_loss += kl_loss.item()
+            val_token_accuracy += token_acc.item()
+            val_completion_accuracy += sample_completion_acc
+
+        # Average metrics
+        val_samples = len(val_data)
+        val_total_loss /= val_samples
+        val_rec_loss /= val_samples
+        val_kl_loss /= val_samples
+        val_token_accuracy /= val_samples
+        val_completion_accuracy /= val_samples
+
+        # Log validation metrics
+        wandb.log(
+            {
+                "val/total_loss": val_total_loss,
+                "val/reconstruction_loss": val_rec_loss,
+                "val/kl_loss": val_kl_loss,
+                "val/token_accuracy": val_token_accuracy,
+                "val/completion_accuracy": val_completion_accuracy,
+            }
+        )
+
+        # Log a sample completion
+        sample_idx = 0
+        completion = tokenizer.decode(generated_ids)
+        label = tokenizer.decode(target_ids)
+        wandb.log(
+            {
+                "val/completion": wandb.Table(
+                    columns=["Type", "Text"],
+                    data=[["Completion", completion], ["Label", label]],
+                ),
+            }
+        )
+
+        logger.info(f"Validation metrics:")
+        logger.info(f"  total_loss: {val_total_loss:.4f}")
+        logger.info(f"  rec_loss: {val_rec_loss:.4f}")
+        logger.info(f"  kl_loss: {val_kl_loss:.4f}")
+        logger.info(f"  token_accuracy: {val_token_accuracy:.4f}")
+        logger.info(f"  completion_accuracy: {val_completion_accuracy:.4f}")
+        logger.info(f"  sample completion: {completion[:32]}...")
+        logger.info(f"  sample label: {label[:32]}...")
+
+    encoder.train()
+    decoder.train()
+
+    return val_total_loss, val_completion_accuracy
+
+
+def save_models(encoder, decoder, args):
+    """Save models to Hugging Face Hub."""
+    logger.info("Saving to hub...")
+    try:
+        # Unwrap models before pushing to hub
+        unwrapped_encoder = accelerator.unwrap_model(encoder)
+        unwrapped_encoder.push_to_hub(args.hub_repo_id + "-encoder")
+        unwrapped_decoder = accelerator.unwrap_model(decoder)
+        unwrapped_decoder.push_to_hub(args.hub_repo_id + "-decoder")
+    except Exception as e:
+        logger.error(f"Error pushing to hub: {e}")
+
+
+def main():
+    args = parse_args()
+
+    wandb.init(project=args.wandb_project)
+
+    print("--- Training Config ---")
+    logger.info(args)
+    print("---")
+
+    # Setup models, tokenizer and datasets
+    encoder, decoder = setup_models(args)
+    tokenizer = setup_tokenizer(args)
+    train_dataloader, val_data = setup_datasets(args, tokenizer)
+
+    # Log parameter counts
+    log_parameter_counts(encoder, decoder)
+
+    # Setup optimizer
+    train_params = []
+    train_params.extend([p for p in encoder.parameters() if p.requires_grad])
+    train_params.extend([p for p in decoder.parameters() if p.requires_grad])
+
+    optimizer = torch.optim.AdamW(
+        train_params,
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
 
-    ENCODER, DECODER, DATALOADER, OPTIMIZER = accelerator.prepare(
-        ENCODER, DECODER, DATALOADER, OPTIMIZER
+    # Prepare for distributed training
+    encoder, decoder, train_dataloader, optimizer = accelerator.prepare(
+        encoder, decoder, train_dataloader, optimizer
     )
-    ENCODER.to(accelerator.device)
-    DECODER.to(accelerator.device)
+    encoder.to(accelerator.device)
+    decoder.to(accelerator.device)
 
-    PROCESSED_TOKENS = 0
-    START_TIME = time.time()
+    # Training loop
+    current_step = 0
+    processed_tokens = 0
+    start_time = time.time()
 
-    for batch in DATALOADER:
-        OPTIMIZER.zero_grad()
-        total_loss, rec_loss, kl_loss, mem_embeds, input_ids, token_accuracy = (
-            training_step(batch)
+    for batch in train_dataloader:
+        optimizer.zero_grad()
+        total_loss, rec_loss, kl_loss, latent_embeds, input_ids, token_accuracy = (
+            training_step(encoder, decoder, batch, tokenizer, accelerator.device)
         )
-        mem_embeds_mean = mem_embeds.mean()
-        mem_embeds_std = mem_embeds.std()
+        latent_embeds_mean = latent_embeds.mean()
+        latent_embeds_std = latent_embeds.std()
         wandb.log(
             {
                 "train/total_loss": total_loss.item(),
                 "train/reconstruction_loss": rec_loss.item(),
                 "train/kl_loss": kl_loss.item(),
                 "train/token_accuracy": token_accuracy.item(),
-                "train/mem_embeds_mean": mem_embeds_mean.item(),
-                "train/mem_embeds_std": mem_embeds_std.item(),
+                "train/latent_embeds_mean": latent_embeds_mean.item(),
+                "train/latent_embeds_std": latent_embeds_std.item(),
             }
         )
         accelerator.backward(total_loss)
-        OPTIMIZER.step()
-        PROCESSED_TOKENS += args.block_size * args.batch_size
-        TOKEN_PER_SECOND = PROCESSED_TOKENS / (time.time() - START_TIME)
+        optimizer.step()
+        processed_tokens += args.block_size * args.batch_size
+        token_per_second = processed_tokens / (time.time() - start_time)
 
         if current_step % args.log_interval == 0:
             logger.info(
-                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.item():.4f}; rec_loss: {rec_loss.item():.4f}; kl_loss: {kl_loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {TOKEN_PER_SECOND:.2f} tokens/s (processed {PROCESSED_TOKENS} tokens)"
+                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.item():.4f}; rec_loss: {rec_loss.item():.4f}; kl_loss: {kl_loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {token_per_second:.2f} tokens/s (processed {processed_tokens} tokens)"
             )
             logger.info(
-                f"mem_embeds_mean: {mem_embeds_mean.item():.4f}; mem_embeds_std: {mem_embeds_std.item():.4f}"
+                f"latent_embeds_mean: {latent_embeds_mean.item():.4f}; latent_embeds_std: {latent_embeds_std.item():.4f}"
             )
 
         if args.save_interval > 0 and current_step % args.save_interval == 0:
-            logger.info("Saving to hub...")
-            try:
-                # Unwrap models before pushing to hub
-                unwrapped_encoder = accelerator.unwrap_model(ENCODER)
-                unwrapped_encoder.push_to_hub(args.hub_repo_id + "-encoder")
-                unwrapped_decoder = accelerator.unwrap_model(DECODER)
-                unwrapped_decoder.push_to_hub(args.hub_repo_id + "-decoder")
-            except Exception as e:
-                logger.error(f"Error pushing to hub: {e}")
+            save_models(encoder, decoder, args)
 
-        if current_step % args.validating_interval == 0:
-            logger.info("Generating...")
-            ENCODER.eval()
-            DECODER.eval()
-            mem_mean = mem_embeds.mean()
-            mem_std = mem_embeds.std()
-            logger.info(
-                f"mem_mean: {mem_mean.item():.4f}; mem_std: {mem_std.item():.4f}"
-            )
-            with torch.no_grad():
-                batch = next(iter(DATALOADER))
-                generated_ids = DECODER.generate(
-                    mem_embeds[:1, :, :],
-                    max_new_tokens=args.max_new_tokens,
-                )
-                completion = TOKENIZER.decode(generated_ids[0])
-                label = TOKENIZER.decode(input_ids[0, :])
-                # Log completion and input_ids
-                wandb.log(
-                    {
-                        "train/completion": wandb.Table(
-                            columns=["Type", "Text"],
-                            data=[["Completion", completion], ["Label", label]],
-                        ),
-                    }
-                )
-                logger.info(
-                    f"[{current_step}/{args.training_steps}] completion: {completion[:32]}..."
-                )
-                logger.info(
-                    f"[{current_step}/{args.training_steps}] label: {label[:32]}..."
-                )
-            ENCODER.train()
-            DECODER.train()
-            START_TIME = time.time()
-            current_step += 1
+        if (
+            args.validating_interval > 0
+            and current_step % args.validating_interval == 0
+        ):
+            logger.info("Validating...")
+            validate(encoder, decoder, val_data, tokenizer, args)
+            start_time = time.time()  # Reset timer after validation
+
+        current_step += 1
 
         if current_step >= args.training_steps:
             break
-
-        current_step += 1
 
 
 if __name__ == "__main__":
