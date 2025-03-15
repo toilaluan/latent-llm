@@ -115,17 +115,17 @@ def main():
         input_ids = batch.to(accelerator.device)
         labels = batch.to(accelerator.device)
 
-        # Get encoder outputs - mem_embeds and encoder KL loss
-        mem_embeds, encoder_kl_loss, _ = ENCODER(
+        # Get encoder outputs - mem_embeds, encoder KL loss, and mean
+        mem_embeds, encoder_kl_loss, mean = ENCODER(
             input_ids, pad_token_id=TOKENIZER.pad_token_id
         )
 
-        # Get decoder outputs - now includes decoder KL loss
+        # Get decoder outputs
         logits, ce_loss, token_accuracy = DECODER(
             input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
 
-        # Combine all losses
+        # Combine losses
         total_loss = ce_loss + encoder_kl_loss
 
         return (
@@ -255,8 +255,15 @@ def main():
             )
             with torch.no_grad():
                 batch = next(iter(DATALOADER))
+                # For generation, we can use the mean directly from the encoder output
+                # This is more stable than using the sampled embeddings
+                _, _, mean = ENCODER(
+                    batch.to(accelerator.device), pad_token_id=TOKENIZER.pad_token_id
+                )
                 generated_ids = DECODER.generate(
-                    mem_embeds[:1, :, :],
+                    mean[
+                        :1, :, :
+                    ],  # Use mean instead of sampled embeddings for generation
                     max_new_tokens=args.max_new_tokens,
                 )
                 completion = TOKENIZER.decode(generated_ids[0])
