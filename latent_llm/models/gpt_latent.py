@@ -134,8 +134,7 @@ class LatentEncoder(nn.Module):
         self.model.push_to_hub(repo_id)
 
         folder = os.path.dirname(f"{ckpt_dir}/{repo_id}")
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
 
         # Save tensors using safetensors
         tensors = {
