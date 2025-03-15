@@ -122,24 +122,16 @@ def main():
         )
 
         # Get decoder outputs - now includes decoder KL loss
-        logits, decoder_loss, token_accuracy = DECODER(
+        logits, ce_loss, decoder_kl_loss, token_accuracy = DECODER(
             input_ids, mem_embeds, labels=labels, ignore_index=TOKENIZER.pad_token_id
         )
 
-        # Split decoder_loss into reconstruction loss and decoder KL loss
-        if isinstance(decoder_loss, tuple):
-            rec_loss, decoder_kl_loss = decoder_loss
-        else:
-            # For backward compatibility
-            rec_loss = decoder_loss
-            decoder_kl_loss = torch.tensor(0.0, device=rec_loss.device)
-
         # Combine all losses
-        total_loss = rec_loss + encoder_kl_loss + decoder_kl_loss
+        total_loss = ce_loss + encoder_kl_loss + decoder_kl_loss
 
         return (
             total_loss,
-            rec_loss,
+            ce_loss,
             encoder_kl_loss,
             decoder_kl_loss,
             mem_embeds,
@@ -206,7 +198,7 @@ def main():
         OPTIMIZER.zero_grad()
         (
             total_loss,
-            rec_loss,
+            ce_loss,
             encoder_kl_loss,
             decoder_kl_loss,
             mem_embeds,
@@ -218,7 +210,7 @@ def main():
         wandb.log(
             {
                 "train/total_loss": total_loss.detach().item(),
-                "train/reconstruction_loss": rec_loss.detach().item(),
+                "train/ce_loss": ce_loss.detach().item(),
                 "train/encoder_kl_loss": encoder_kl_loss.detach().item(),
                 "train/decoder_kl_loss": decoder_kl_loss.detach().item(),
                 "train/token_accuracy": token_accuracy.detach().item(),
@@ -236,7 +228,7 @@ def main():
         if current_step % args.log_interval == 0:
             logger.info(
                 f"[{current_step}/{args.training_steps}] total_loss: {total_loss.detach().item():.4f}; "
-                f"rec_loss: {rec_loss.detach().item():.4f}; "
+                f"ce_loss: {ce_loss.detach().item():.4f}; "
                 f"encoder_kl_loss: {encoder_kl_loss.detach().item():.4f}; "
                 f"decoder_kl_loss: {decoder_kl_loss.detach().item():.4f}; "
                 f"token_accuracy: {token_accuracy.detach().item():.4f}; "

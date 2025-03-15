@@ -388,9 +388,6 @@ class LatentDecoder(nn.Module):
                 ignore_index=ignore_index,
             )
 
-            # Add KL loss to cross-entropy loss
-            loss = ce_loss + kl_loss
-
             # Calculate token accuracy
             predictions = torch.argmax(logits, dim=-1)
             valid_tokens = labels != ignore_index
@@ -399,9 +396,9 @@ class LatentDecoder(nn.Module):
                 torch.sum(correct_tokens).float() / torch.sum(valid_tokens).float()
             )
 
-            return logits, loss, accuracy
+            return logits, ce_loss, kl_loss, accuracy
 
-        return logits, kl_loss, None
+        return logits, None, kl_loss, None
 
     def generate(
         self,
