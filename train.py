@@ -135,7 +135,7 @@ def setup_datasets(args, tokenizer):
     )
     val_dataloader = DataLoader(
         val_dataset,
-        batch_size=args.batch_size,
+        batch_size=args.batch_size // 2,
         shuffle=True,
     )
     val_dataloader = cycle(val_dataloader)
