@@ -28,6 +28,50 @@ class TextDataset(Dataset):
         self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.block_size = block_size
 
+    def get_statistics(self):
+        total_tokens = 0
+        total_padding = 0
+        token_counts = []
+        sample_size = min(1000, len(self))
+
+        for i in range(sample_size):
+            input_ids = self.__getitem__(i)
+            n_tokens = (input_ids != self.tokenizer.pad_token_id).sum().item()
+            token_counts.append(n_tokens)
+            total_tokens += n_tokens
+            total_padding += self.block_size - n_tokens
+
+        avg_tokens = total_tokens / sample_size
+        avg_padding = total_padding / sample_size
+        token_counts = torch.tensor(token_counts)
+
+        print(f"Token distribution statistics:")
+        print(f"  Average tokens: {avg_tokens:.2f}")
+        print(f"  Average padding: {avg_padding:.2f}")
+        print(f"  Min tokens: {token_counts.min().item()}")
+        print(f"  Max tokens: {token_counts.max().item()}")
+        print(f"  Median tokens: {token_counts.median().item()}")
+        print(f"  Std dev: {token_counts.std().item():.2f}")
+        print(
+            f"  25th percentile: {torch.quantile(token_counts.float(), 0.25).item():.2f}"
+        )
+        print(
+            f"  75th percentile: {torch.quantile(token_counts.float(), 0.75).item():.2f}"
+        )
+        print(f"  Fill rate: {(avg_tokens / self.block_size) * 100:.2f}%")
+
+        return {
+            "avg_tokens": avg_tokens,
+            "avg_padding": avg_padding,
+            "min_tokens": token_counts.min().item(),
+            "max_tokens": token_counts.max().item(),
+            "median_tokens": token_counts.median().item(),
+            "std_dev": token_counts.std().item(),
+            "25th_percentile": torch.quantile(token_counts.float(), 0.25).item(),
+            "75th_percentile": torch.quantile(token_counts.float(), 0.75).item(),
+            "fill_rate": (avg_tokens / self.block_size) * 100,
+        }
+
     def __len__(self):
         return len(self.dataset)
 
@@ -44,12 +88,17 @@ class TextDataset(Dataset):
             max_length=self.block_size,
             add_special_tokens=True,
         ).input_ids
-        if random.random() < 0.1:
-            n_tokens = random.randint(1, self.block_size // 2 + 1)
-        elif random.random() < 0.4:
-            n_tokens = random.randint(self.block_size // 2 + 1, self.block_size - 1)
-        else:
-            n_tokens = self.block_size
+
+        # Better approach 1: Natural distribution
+        # Use a more natural distribution like beta or triangular
+        beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
+        ratio = np.random.beta(beta_a, beta_b)
+        n_tokens = max(1, int(ratio * self.block_size))
+
+        # Alternative: Triangular distribution
+        # n_tokens = random.triangular(1, self.block_size, self.block_size * 0.8)
+        # n_tokens = max(1, int(n_tokens))
+
         input_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
@@ -79,11 +128,16 @@ class RandomTokenDataset(Dataset):
             truncation=True,
             max_length=self.block_size,
         ).input_ids
-        if random.random() < 0.1:
-            n_tokens = random.randint(1, self.block_size // 2 + 1)
-        elif random.random() < 0.4:
-            n_tokens = random.randint(self.block_size // 2 + 1, self.block_size - 1)
-        else:
-            n_tokens = self.block_size
+
+        # Better approach 1: Natural distribution
+        # Use a more natural distribution like beta or triangular
+        beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
+        ratio = np.random.beta(beta_a, beta_b)
+        n_tokens = max(1, int(ratio * self.block_size))
+
+        # Alternative: Triangular distribution
+        # n_tokens = random.triangular(1, self.block_size, self.block_size * 0.8)
+        # n_tokens = max(1, int(n_tokens))
+
         random_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return random_ids.squeeze(0)
