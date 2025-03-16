@@ -103,6 +103,8 @@ class GPTLatentFlowMatching(nn.Module):
         B, T, D = latents.shape
         assert self.latent_shape == (T, D), "Latent shape mismatch"
         latents = latents.to(self.device)
+        print(f"Latents shape: {latents.shape}")
+        print(f"Timesteps: {timesteps}")
         try:
             t_embs = self.get_timestep_tokens(timesteps)
         except Exception as e:
