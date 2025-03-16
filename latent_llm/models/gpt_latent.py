@@ -51,7 +51,7 @@ class LatentEncoder(nn.Module):
         self.kl_weight = kl_weight
         self.init_weights()
         self.init_position_ids()
-        # self.init_lora()
+        self.init_lora()
 
     def init_lora(self):
         lora_config = LoraConfig(
@@ -307,13 +307,13 @@ class LatentDecoder(nn.Module):
         self.base_config = self.model.config
         self.latent_size = latent_size
         self.block_size = block_size
-        self.mid_tokens = nn.Parameter(
-            torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
-        )
-        self.mid_token_size = mid_token_size
-        self.latent_proj = LatentProjector(
-            self.base_config.hidden_size, self.base_config.hidden_size, torch_dtype
-        )
+        # self.mid_tokens = nn.Parameter(
+        #     torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
+        # )
+        # self.mid_token_size = mid_token_size
+        # self.latent_proj = LatentProjector(
+        #     self.base_config.hidden_size, self.base_config.hidden_size, torch_dtype
+        # )
         self.init_position_ids()
 
     def freeze_base_model(self):
@@ -340,12 +340,12 @@ class LatentDecoder(nn.Module):
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
-        latent_embeds = self.latent_proj(latent_embeds)
+        # latent_embeds = self.latent_proj(latent_embeds)
         context_embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
                 latent_embeds,
-                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
+                # self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
                 context_embeds,
             ],
             dim=1,
@@ -354,7 +354,7 @@ class LatentDecoder(nn.Module):
             inputs_embeds=embeds,
             # position_ids=self.position_ids[: embeds.size(1)].unsqueeze(0).expand(B, -1),
         ).logits
-        logits = logits[:, self.latent_size + self.mid_token_size - 1 : -1, :]
+        logits = logits[:, self.latent_size - 1 : -1, :]
         if labels is not None:
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
