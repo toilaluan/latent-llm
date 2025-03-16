@@ -103,9 +103,17 @@ class GPTLatentFlowMatching(nn.Module):
         B, T, D = latents.shape
         assert self.latent_shape == (T, D), "Latent shape mismatch"
         latents = latents.to(self.device)
-        t_embs = self.get_timestep_tokens(timesteps)
+        try:
+            t_embs = self.get_timestep_tokens(timesteps)
+        except Exception as e:
+            print(f"Error getting timestep tokens: {e}")
+            raise
         t_embs = t_embs.to(self.device)
-        embeds = self.model.get_input_embeddings()(input_ids)
+        try:
+            embeds = self.model.get_input_embeddings()(input_ids)
+        except Exception as e:
+            print(f"Error getting input embeddings: {e}")
+            raise
         embeds = torch.cat([embeds, t_embs, latents], dim=1)
         attention_mask = torch.cat(
             [
