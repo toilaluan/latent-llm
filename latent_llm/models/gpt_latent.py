@@ -37,7 +37,7 @@ class LatentEncoder(nn.Module):
         self.latent_transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 self.base_config.hidden_size,
-                nhead=6,
+                nhead=4,
                 dim_feedforward=2 * self.base_config.hidden_size,
             ),
             num_layers=3,
