@@ -34,6 +34,7 @@ class LatentEncoder(nn.Module):
             attn_implementation=attn_implementation,
         )
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        print("ttt", self.tokenizer.pad_token_id)
         self.base_config = self.model.config
         # For VAE, we need separate parameters for mean and log variance
         self.latent_tokens_mean = nn.Parameter(
