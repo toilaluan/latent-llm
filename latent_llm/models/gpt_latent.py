@@ -1,4 +1,5 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from latent_llm.get_tokenizer import get_tokenizer
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -34,7 +35,7 @@ class LatentEncoder(nn.Module):
             attn_implementation=attn_implementation,
         )
         self.base_config = self.model.config
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.tokenizer = get_tokenizer(model_name)
         # For VAE, we need separate parameters for mean and log variance
         self.latent_tokens_mean = nn.Parameter(
             torch.randn(latent_size, self.base_config.hidden_size, dtype=torch_dtype)
@@ -633,8 +634,7 @@ if __name__ == "__main__":
     else:
         device = "cpu"
         attn_implementation = "sdpa"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+    tokenizer = get_tokenizer(model_name)
     latent_encoder = LatentEncoder(
         model_name,
         latent_size,

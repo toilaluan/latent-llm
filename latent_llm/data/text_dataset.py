@@ -1,6 +1,6 @@
 from datasets import load_dataset
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer
+from latent_llm.get_tokenizer import get_tokenizer
 import os
 import numpy as np
 import random
@@ -24,8 +24,7 @@ class TextDataset(Dataset):
         block_size: int = 1024,
     ):
         self.dataset = load_dataset(dataset_id, split=split, num_proc=NUM_PROC)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        self.tokenizer = get_tokenizer(model_name)
         self.block_size = block_size
         self.get_statistics()
 
@@ -82,8 +81,7 @@ class TextDataset(Dataset):
 
 class RandomTokenDataset(Dataset):
     def __init__(self, model_name: str, block_size: int = 1024):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        self.tokenizer = get_tokenizer(model_name)
         self.block_size = block_size
         self.vocab_size = len(self.tokenizer)
         self.all_chars = list("abcdefghijklmnopqrstuvwxyz0123456789")

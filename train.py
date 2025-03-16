@@ -5,7 +5,7 @@ from latent_llm.data.text_dataset import (
 )
 from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from latent_llm.get_tokenizer import get_tokenizer
 import wandb
 import logging
 from rich.logging import RichHandler
@@ -105,9 +105,7 @@ def setup_models(args):
 
 def setup_tokenizer(args):
     """Setup and configure the tokenizer."""
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
-    # Add new pad token
-    tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+    tokenizer = get_tokenizer(args.model_name)
     tokenizer.push_to_hub(args.hub_repo_id + "-encoder")
     logger.info(f"pad_token: {tokenizer.pad_token}: {tokenizer.pad_token_id}")
     logger.info(f"eos_token: {tokenizer.eos_token}: {tokenizer.eos_token_id}")

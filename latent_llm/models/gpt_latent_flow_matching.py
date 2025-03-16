@@ -1,4 +1,5 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from latent_llm.get_tokenizer import get_tokenizer
+from transformers import AutoModelForCausalLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -32,8 +33,7 @@ class GPTLatentFlowMatching(nn.Module):
         self.torch_dtype = torch_dtype
         self.device = device
         self.use_lora = use_lora
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+        self.tokenizer = get_tokenizer(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name, torch_dtype=torch_dtype
         )
