@@ -145,6 +145,8 @@ class LatentEncoder(nn.Module):
         # Sample latent vectors using reparameterization trick
         rep_latent_embeds = self.reparameterize(latents, logvar)
 
+        print(logvar.sum())
+
         return rep_latent_embeds, kl_loss, latents
 
     def push_to_hub(self, repo_id: str, ckpt_dir: str = CKPT_DIR):
