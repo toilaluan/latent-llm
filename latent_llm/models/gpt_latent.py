@@ -316,7 +316,7 @@ class LatentDecoder(nn.Module):
         )
         logits = self.model(
             inputs_embeds=embeds,
-            position_ids=self.position_ids[: embeds.size(1)].unsqueeze(0).expand(B, -1),
+            # position_ids=self.position_ids[: embeds.size(1)].unsqueeze(0).expand(B, -1),
         ).logits
         logits = logits[:, self.latent_size + self.mid_token_size - 1 : -1, :]
         if labels is not None:
