@@ -37,7 +37,7 @@ class LatentEncoder(nn.Module):
         self.latent_transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 self.base_config.hidden_size,
-                nhead=12,
+                nhead=6,
                 dim_feedforward=2 * self.base_config.hidden_size,
             ),
             num_layers=3,
@@ -144,7 +144,6 @@ class LatentEncoder(nn.Module):
 
         # Get the hidden states for gist tokens
         latents = last_hidden_states[:, -self.latent_size :, :]
-
 
         latents = self.latent_transformer(latents)
 
