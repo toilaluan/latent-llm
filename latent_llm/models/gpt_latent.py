@@ -51,6 +51,16 @@ class LatentEncoder(nn.Module):
         self.kl_weight = kl_weight
         self.init_weights()
         self.init_position_ids()
+        self.init_lora()
+
+    def init_lora(self):
+        lora_config = LoraConfig(
+            r=128,
+            lora_alpha=256,
+            lora_dropout=0.1,
+            lora_train_bias=False,
+        )
+        self.model = get_peft_model(self.model, lora_config)
 
     def init_position_ids(self):
         step = max(self.block_size // self.latent_size, 1)
