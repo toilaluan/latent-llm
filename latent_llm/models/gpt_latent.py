@@ -38,7 +38,8 @@ class LatentEncoder(nn.Module):
             nn.TransformerEncoderLayer(
                 self.base_config.hidden_size,
                 nhead=4,
-                dim_feedforward=2 * self.base_config.hidden_size,
+                dim_feedforward=self.base_config.hidden_size,
+                bias=False,
             ),
             num_layers=3,
         ).to(dtype=torch_dtype)
@@ -59,7 +60,7 @@ class LatentEncoder(nn.Module):
         self.kl_weight = kl_weight
         self.init_weights()
         self.init_position_ids()
-        self.init_lora()
+        # self.init_lora()
 
     def init_lora(self):
         lora_config = LoraConfig(
