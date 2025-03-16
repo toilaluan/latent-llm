@@ -139,13 +139,13 @@ class LatentEncoder(nn.Module):
 
         logvar = self.latent_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
 
-        # Calculate KL divergence
-        kl_loss = self.kl_divergence(latents, logvar) * self.kl_weight
-
-        # Sample latent vectors using reparameterization trick
-        rep_latent_embeds = self.reparameterize(latents, logvar)
-
-        print(logvar.sum())
+        if self.kl_weight > 0:
+            # Calculate KL divergence
+            kl_loss = self.kl_divergence(latents, logvar) * self.kl_weight
+            rep_latent_embeds = self.reparameterize(latents, logvar)
+        else:
+            kl_loss = torch.zeros(1, device=latents.device)
+            rep_latent_embeds = latents
 
         return rep_latent_embeds, kl_loss, latents
 
