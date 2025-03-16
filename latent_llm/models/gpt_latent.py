@@ -49,10 +49,10 @@ class LatentEncoder(nn.Module):
             "block_size": block_size,
         }
         self.kl_weight = kl_weight
+        self.init_position_ids()
 
     def _training_init(self):
         self.init_weights()
-        self.init_position_ids()
         self.init_lora()
 
     def init_lora(self):
