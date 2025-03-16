@@ -61,6 +61,7 @@ class LatentEncoder(nn.Module):
             lora_train_bias=False,
         )
         self.model = get_peft_model(self.model, lora_config)
+        self.model.print_trainable_parameters()
 
     def init_position_ids(self):
         step = max(self.block_size // self.latent_size, 1)
