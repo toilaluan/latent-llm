@@ -344,22 +344,22 @@ class LatentDecoder(nn.Module):
         labels: Optional[torch.Tensor] = None,
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+        """
+        Input sequence: [L0, L1, ..., Ln-1, C0, C1, ..., CT-1]
+                            (latent_size = n)  (context_len = T)
+
+        Logits positions:  n-1   n   n+1  ... n+T-1
+        Predictions:        C0   C1   C2   ... CT
+        """
         B, T = input_ids.size()
         # latent_embeds = self.latent_proj(latent_embeds)
         context_embeds = self.model.get_input_embeddings()(input_ids)
-        embeds = torch.cat(
-            [
-                latent_embeds,
-                # self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
-                context_embeds,
-            ],
-            dim=1,
-        )
-        logits = self.model(
-            inputs_embeds=embeds,
-            # position_ids=self.position_ids[: embeds.size(1)].unsqueeze(0).expand(B, -1),
-        ).logits
-        logits = logits[:, self.latent_size - 1 : -1, :]
+        embeds = torch.cat([latent_embeds, context_embeds], dim=1)
+
+        # Align last latent token with first label token
+        logits = self.model(inputs_embeds=embeds).logits
+        logits = logits[:, self.latent_size - 1 : -1, :]  # Modified slice
+
         if labels is not None:
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
