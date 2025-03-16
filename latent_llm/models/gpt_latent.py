@@ -425,41 +425,41 @@ class LatentDecoder(nn.Module):
     def push_to_hub(self, repo_id: str):
         self.model.push_to_hub(repo_id)
 
-        # Create full directory path for the checkpoint
-        full_ckpt_path = os.path.join(CKPT_DIR, repo_id)
-        os.makedirs(full_ckpt_path, exist_ok=True)
+        # # Create full directory path for the checkpoint
+        # full_ckpt_path = os.path.join(CKPT_DIR, repo_id)
+        # os.makedirs(full_ckpt_path, exist_ok=True)
 
-        # Save decoder-specific tensors using safetensors
-        tensors = {
-            **self._get_proj_state_dict(),
-        }
-        save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
-        save_file(tensors, save_path)
+        # # Save decoder-specific tensors using safetensors
+        # tensors = {
+        #     **self._get_proj_state_dict(),
+        # }
+        # save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
+        # save_file(tensors, save_path)
 
-        # Save decoder configuration
-        config = {
-            "latent_size": self.latent_size,
-            "block_size": self.block_size,
-            "mid_token_size": self.mid_token_size,
-        }
-        import json
+        # # Save decoder configuration
+        # config = {
+        #     "latent_size": self.latent_size,
+        #     "block_size": self.block_size,
+        #     "mid_token_size": self.mid_token_size,
+        # }
+        # import json
 
-        config_path = os.path.join(full_ckpt_path, "decoder_config.json")
-        with open(config_path, "w") as f:
-            json.dump(config, f)
+        # config_path = os.path.join(full_ckpt_path, "decoder_config.json")
+        # with open(config_path, "w") as f:
+        #     json.dump(config, f)
 
-        # Upload to hub
-        hf_api = HfApi()
-        hf_api.upload_file(
-            repo_id=repo_id,
-            path_or_fileobj=save_path,
-            path_in_repo="decoder_tokens.safetensors",
-        )
-        hf_api.upload_file(
-            repo_id=repo_id,
-            path_or_fileobj=config_path,
-            path_in_repo="decoder_config.json",
-        )
+        # # Upload to hub
+        # hf_api = HfApi()
+        # hf_api.upload_file(
+        #     repo_id=repo_id,
+        #     path_or_fileobj=save_path,
+        #     path_in_repo="decoder_tokens.safetensors",
+        # )
+        # hf_api.upload_file(
+        #     repo_id=repo_id,
+        #     path_or_fileobj=config_path,
+        #     path_in_repo="decoder_config.json",
+        # )
 
     def _get_proj_state_dict(self):
         """Extract projection layer parameters with clear naming"""
