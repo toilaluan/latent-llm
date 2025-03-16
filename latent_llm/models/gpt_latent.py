@@ -249,6 +249,7 @@ class LatentEncoder(nn.Module):
                 self.latent_tokens_mean.data = tensors["latent_tokens_mean"]
                 self.latent_tokens_logvar.data = tensors["latent_tokens_logvar"]
             else:
+                print("Backward compatibility with older non-VAE format")
                 # Backward compatibility with older non-VAE format
                 self.latent_tokens_mean.data = tensors["latent_tokens"]
                 # Initialize logvar with zeros
