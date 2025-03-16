@@ -21,7 +21,7 @@ DEVICE = (
 
 TEXT = "The quick brown fox jumps over the lazy dog"
 
-LONG_TEXT = TEXT * 1000
+LONG_TEXT = TEXT * 5
 
 
 def cycle(dataloader):
