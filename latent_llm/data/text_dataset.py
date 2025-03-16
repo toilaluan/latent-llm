@@ -73,7 +73,7 @@ class TextDataset(Dataset):
         ).input_ids
 
         r = random.random()
-        if r < 0.1 and self.random_masking:
+        if r < 0.4 and self.random_masking:
             beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
             ratio = np.random.beta(beta_a, beta_b)
             n_tokens = max(1, int(ratio * self.block_size))
