@@ -168,6 +168,7 @@ def training_step(
     input_ids = batch.to(device)
     labels = batch.to(device)
     input_ids[:, n_mask:] = tokenizer.pad_token_id
+    labels[:, n_mask:] = tokenizer.pad_token_id
     latent_embeds, kl_loss, latents = encoder(
         input_ids, pad_token_id=tokenizer.pad_token_id
     )
