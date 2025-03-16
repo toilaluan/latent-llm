@@ -65,12 +65,14 @@ class GPTLatentFlowMatching(nn.Module):
         # Return shape is [B, T, D]
         timestep_tokens = []
         for timestep in timesteps:
+            print(f"Timestep: {timestep}")
             indexes = list(
                 range(
                     (timestep - 1) * self.timestep_token_size,
                     timestep * self.timestep_token_size,
                 )
             )
+            print(f"Indexes: {indexes}")
             timesteps = self.timestep_embeddings(
                 torch.tensor(indexes, device=self.device).long().unsqueeze(0)
             )  # [1, T, D]
