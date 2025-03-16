@@ -292,7 +292,6 @@ def train_one_epoch(
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
         suffix_tokens = batch["suffix"].to(device)
-        print(suffix_tokens[0])
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
             rep_latents, _, clean_latents = encoder(
@@ -317,7 +316,6 @@ def train_one_epoch(
             timesteps = torch.randint(
                 1, args.max_steps + 1, (batch_size,), device=device
             ).tolist()
-            print(f"Timesteps: {timesteps}")
             timesteps_histogram.extend(timesteps)
 
             # Log wandb timesteps
