@@ -76,6 +76,7 @@ def main():
 
     # Decode from latent representation
     logger.info("Generating text from latent representation...")
+    print(pipeline.encoder.block_size)
     generated_text = pipeline.decode(
         latent_embeds,
         max_new_tokens=pipeline.encoder.block_size,
