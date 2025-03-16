@@ -164,7 +164,7 @@ def training_step(
     encoder, decoder, batch, tokenizer, device, current_step, warmup_steps, block_size
 ):
     """Perform a single training step."""
-    n_mask = max(1, int(block_size * current_step / warmup_steps))
+    n_mask = min(block_size, max(1, int(block_size * current_step / warmup_steps)))
     input_ids = batch.to(device)
     labels = batch.to(device)
     input_ids[:, n_mask:] = tokenizer.pad_token_id
