@@ -144,6 +144,9 @@ def setup_datasets(args, tokenizer, block_size=16):
     )
     val_dataloader = cycle(val_dataloader)
 
+    for i in range(5):
+        logger.info(f"Training sample: {train_dataset[i]}")
+
     return train_dataloader, val_dataloader
 
 
