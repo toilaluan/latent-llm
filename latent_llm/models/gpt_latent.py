@@ -58,7 +58,8 @@ class LatentEncoder(nn.Module):
             r=128,
             lora_alpha=256,
             lora_dropout=0.1,
-            lora_train_bias=False,
+            target_modules=["k_proj", "v_proj", "q_proj"],
+            task_type=TaskType.CAUSAL_LM,
         )
         self.model = get_peft_model(self.model, lora_config)
         self.model.print_trainable_parameters()
