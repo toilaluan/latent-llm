@@ -577,12 +577,13 @@ class GPTLatentVAEPipeline:
             truncation=True,
         )
         input_ids = inputs.input_ids.to(self.encoder.model.device)
-
+        print(input_ids.shape)
         # Generate memory embeddings
         with torch.no_grad():
-            rep_latent_embeds, _, latent_embeds = self.encoder(
+            rep_latent_embeds, kl_loss, latent_embeds = self.encoder(
                 input_ids, self.tokenizer.pad_token_id
             )
+        print(kl_loss)
 
         return rep_latent_embeds, latent_embeds
 
