@@ -334,9 +334,11 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
                 truncation=True,
                 max_length=encoder.block_size,
             ).input_ids.to(DEVICE)
-            latent_embeds = encoder(input_ids, pad_token_id=tokenizer.pad_token_id)
+            r_latent_embeds, _, _ = encoder(
+                input_ids, pad_token_id=tokenizer.pad_token_id
+            )
             generated_ids = decoder.generate(
-                latent_embeds, max_new_tokens=encoder.block_size
+                r_latent_embeds, max_new_tokens=encoder.block_size
             )
             logger.info(f"Input IDs: {input_ids}")
             logger.info(f"Generated text: {tokenizer.decode(generated_ids[0])}")
