@@ -54,6 +54,9 @@ def main():
         torch_dtype=torch.bfloat16,
     )
 
+    # Add this line after pipeline initialization
+    pipeline.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
+
     # Prepare input text
     if args.input_text:
         input_text = args.input_text
