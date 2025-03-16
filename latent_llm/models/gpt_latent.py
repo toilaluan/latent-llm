@@ -312,13 +312,10 @@ class LatentDecoder(nn.Module):
         self.base_config = self.model.config
         self.latent_size = latent_size
         self.block_size = block_size
-        # self.mid_tokens = nn.Parameter(
-        #     torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
-        # )
-        # self.mid_token_size = mid_token_size
-        # self.latent_proj = LatentProjector(
-        #     self.base_config.hidden_size, self.base_config.hidden_size, torch_dtype
-        # )
+        self.mid_token_size = mid_token_size
+        self.mid_tokens = nn.Parameter(
+            torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
+        )
         self.init_position_ids()
 
     def freeze_base_model(self):
@@ -354,11 +351,19 @@ class LatentDecoder(nn.Module):
         B, T = input_ids.size()
         # latent_embeds = self.latent_proj(latent_embeds)
         context_embeds = self.model.get_input_embeddings()(input_ids)
-        embeds = torch.cat([latent_embeds, context_embeds], dim=1)
-
+        embeds = torch.cat(
+            [
+                latent_embeds,
+                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
+                context_embeds,
+            ],
+            dim=1,
+        )
         # Align last latent token with first label token
         logits = self.model(inputs_embeds=embeds).logits
-        logits = logits[:, self.latent_size - 1 : -1, :]  # Modified slice
+        logits = logits[
+            :, self.latent_size + self.mid_token_size + 1 : -1, :
+        ]  # Modified slice
 
         if labels is not None:
             loss = F.cross_entropy(
@@ -398,7 +403,7 @@ class LatentDecoder(nn.Module):
         embeds = torch.cat(
             [
                 latent_embeds,
-                # self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
+                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
             ],
             dim=1,
         )
@@ -435,50 +440,41 @@ class LatentDecoder(nn.Module):
     def push_to_hub(self, repo_id: str):
         self.model.push_to_hub(repo_id)
 
-        # # Create full directory path for the checkpoint
-        # full_ckpt_path = os.path.join(CKPT_DIR, repo_id)
-        # os.makedirs(full_ckpt_path, exist_ok=True)
+        # Create full directory path for the checkpoint
+        full_ckpt_path = os.path.join(CKPT_DIR, repo_id)
+        os.makedirs(full_ckpt_path, exist_ok=True)
 
-        # # Save decoder-specific tensors using safetensors
-        # tensors = {
-        #     **self._get_proj_state_dict(),
-        # }
-        # save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
-        # save_file(tensors, save_path)
-
-        # # Save decoder configuration
-        # config = {
-        #     "latent_size": self.latent_size,
-        #     "block_size": self.block_size,
-        #     "mid_token_size": self.mid_token_size,
-        # }
-        # import json
-
-        # config_path = os.path.join(full_ckpt_path, "decoder_config.json")
-        # with open(config_path, "w") as f:
-        #     json.dump(config, f)
-
-        # # Upload to hub
-        # hf_api = HfApi()
-        # hf_api.upload_file(
-        #     repo_id=repo_id,
-        #     path_or_fileobj=save_path,
-        #     path_in_repo="decoder_tokens.safetensors",
-        # )
-        # hf_api.upload_file(
-        #     repo_id=repo_id,
-        #     path_or_fileobj=config_path,
-        #     path_in_repo="decoder_config.json",
-        # )
-
-    def _get_proj_state_dict(self):
-        """Extract projection layer parameters with clear naming"""
-        return {
-            "proj.0.weight": self.latent_proj[0].weight.data,
-            "proj.0.bias": self.latent_proj[0].bias.data,
-            "proj.2.weight": self.latent_proj[2].weight.data,
-            "proj.2.bias": self.latent_proj[2].bias.data,
+        # Save decoder-specific tensors using safetensors
+        tensors = {
+            "mid_tokens": self.mid_tokens.data,
         }
+        save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
+        save_file(tensors, save_path)
+
+        # Save decoder configuration
+        config = {
+            "latent_size": self.latent_size,
+            "block_size": self.block_size,
+            "mid_token_size": self.mid_token_size,
+        }
+        import json
+
+        config_path = os.path.join(full_ckpt_path, "decoder_config.json")
+        with open(config_path, "w") as f:
+            json.dump(config, f)
+
+        # Upload to hub
+        hf_api = HfApi()
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=save_path,
+            path_in_repo="decoder_tokens.safetensors",
+        )
+        hf_api.upload_file(
+            repo_id=repo_id,
+            path_or_fileobj=config_path,
+            path_in_repo="decoder_config.json",
+        )
 
     def load_pretrained(self, repo_id: str):
         # Download safetensors file
@@ -492,17 +488,46 @@ class LatentDecoder(nn.Module):
         if os.path.exists(tokens_path):
             tensors = load_file(tokens_path)
             self.mid_tokens.data = tensors["mid_tokens"]
-
-            # Reconstruct state dict from named parameters
-            proj_state_dict = {
-                k.replace("proj.", ""): v
-                for k, v in tensors.items()
-                if k.startswith("proj.")
-            }
-            self.latent_proj.load_state_dict(proj_state_dict)
             print(f"Loaded decoder weights from {tokens_path}")
         else:
             raise ValueError(f"Could not find decoder_tokens.safetensors in {repo_id}")
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        repo_id: str,
+        torch_dtype: torch.dtype = torch.bfloat16,
+        device: str = "cuda",
+        attn_implementation: str = "flash_attention_2",
+    ):
+        """Create a LatentDecoder instance from a pretrained model on the Hub."""
+        # Download config
+        try:
+            config_path = snapshot_download(
+                repo_id=repo_id, allow_patterns=["decoder_config.json"]
+            )
+            config_path = os.path.join(config_path, "decoder_config.json")
+            import json
+
+            with open(config_path, "r") as f:
+                config = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Could not find decoder_config.json in {repo_id}") from e
+
+        # Create instance with loaded config
+        instance = cls(
+            model_name=repo_id,
+            latent_size=config["latent_size"],
+            block_size=config["block_size"],
+            torch_dtype=torch_dtype,
+            attn_implementation=attn_implementation,
+            mid_token_size=config["mid_token_size"],
+        )
+
+        # Load weights
+        instance.load_pretrained(repo_id)
+        instance.to(device)
+        return instance
 
 
 class GPTLatentVAEPipeline:
