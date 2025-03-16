@@ -431,7 +431,6 @@ class LatentDecoder(nn.Module):
 
         # Save decoder-specific tensors using safetensors
         tensors = {
-            "mid_tokens": self.mid_tokens.data,
             **self._get_proj_state_dict(),
         }
         save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
