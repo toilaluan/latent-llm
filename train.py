@@ -19,6 +19,11 @@ DEVICE = (
 )
 
 
+TEXT = "The quick brown fox jumps over the lazy dog"
+
+LONG_TEXT = TEXT * 1000
+
+
 def cycle(dataloader):
     while True:
         for batch in dataloader:
@@ -320,9 +325,27 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
         logger.info(f"  sample completion: {completion}...")
         logger.info(f"  sample label: {label}...")
         logger.info(f"  sample completion_rep: {completion_rep}...")
+
+        for text in [TEXT, LONG_TEXT]:
+            input_ids = tokenizer(
+                text,
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                max_length=encoder.block_size,
+            ).input_ids
+            latent_embeds = encoder.encode(
+                input_ids, pad_token_id=tokenizer.pad_token_id
+            )
+            generated_ids = decoder.generate(
+                latent_embeds, max_new_tokens=encoder.block_size
+            )
+            logger.info(f"Input IDs: {input_ids}")
+            logger.info(f"Generated text: {tokenizer.decode(generated_ids[0])}")
+            logger.info(f"Original text: {text}")
+
     encoder.train()
     decoder.train()
-
     return val_total_loss, val_completion_accuracy
 
 
