@@ -161,10 +161,10 @@ def calculate_completion_accuracy(generated_ids, target_ids):
 
 
 def training_step(
-    encoder, decoder, batch, tokenizer, device, current_step, warmup_steps
+    encoder, decoder, batch, tokenizer, device, current_step, warmup_steps, block_size
 ):
     """Perform a single training step."""
-    n_mask = max(1, int(16 * current_step / warmup_steps))
+    n_mask = max(1, int(block_size * current_step / warmup_steps))
     input_ids = batch.to(device)
     labels = batch.to(device)
     input_ids[:, n_mask:] = tokenizer.pad_token_id
@@ -396,6 +396,7 @@ def main():
                 DEVICE,
                 current_step,
                 args.warmup_steps,
+                args.block_size,
             )
         )
         latent_embeds_mean = latent_embeds[0, :, :].mean()

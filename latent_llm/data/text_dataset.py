@@ -80,20 +80,3 @@ class RandomTokenDataset(Dataset):
         #     n_tokens = self.block_size
         # random_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return random_ids.squeeze(0)
-
-
-if __name__ == "__main__":
-    dataset = TextDataset(
-        dataset_id="anothy1/fineweb-edu-cleaned-simplified",
-        split="train",
-        model_name="HuggingFaceTB/SmolLM2-135M",
-        limit=10000,
-    )
-    print(len(dataset))
-    print(dataset[0])
-
-    random_dataset = RandomTextDataset(
-        model_name="HuggingFaceTB/SmolLM2-135M", block_size=1024
-    )
-    print(len(random_dataset))
-    print(random_dataset[0])
