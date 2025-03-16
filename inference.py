@@ -70,6 +70,8 @@ def main():
     logger.info("Encoding input text to latent representation...")
     _, latent_embeds = pipeline.encode(input_text)
 
+    print(latent_embeds.shape)
+
     print(latent_embeds.mean(), latent_embeds.std())
 
     # Decode from latent representation
