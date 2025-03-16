@@ -366,6 +366,7 @@ class LatentDecoder(nn.Module):
         ]  # Modified slice
 
         if labels is not None:
+            print(labels[0], ignore_index)
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
                 labels.reshape(-1),
