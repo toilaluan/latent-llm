@@ -57,6 +57,7 @@ class GPTLatentFlowMatching(nn.Module):
             embedding_dim=self.base_config.hidden_size,
             dtype=torch_dtype,
         )
+        print(f"Timestep embeddings shape: {self.timestep_embeddings.weight.shape}")
         torch.nn.init.kaiming_normal_(self.timestep_embeddings.weight)
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
