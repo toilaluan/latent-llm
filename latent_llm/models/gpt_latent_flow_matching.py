@@ -75,6 +75,7 @@ class GPTLatentFlowMatching(nn.Module):
                 torch.tensor(indexes, device=self.device).long().unsqueeze(0)
             )  # [1, T, D]
             timestep_tokens.append(timesteps)
+        print(f"Timestep tokens shape: {timestep_tokens[0].shape}")
         return torch.cat(timestep_tokens, dim=0)
 
     def forward(
