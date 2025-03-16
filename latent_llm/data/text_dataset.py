@@ -27,8 +27,8 @@ class TextDataset(Dataset):
         self.dataset = load_dataset(dataset_id, split=split, num_proc=NUM_PROC)
         self.tokenizer = get_tokenizer(model_name)
         self.block_size = block_size
-        self.get_statistics()
         self.random_masking = random_masking
+        self.get_statistics()
 
     def get_statistics(self):
         total_tokens = 0
