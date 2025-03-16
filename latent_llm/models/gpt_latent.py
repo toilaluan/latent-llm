@@ -402,8 +402,6 @@ class LatentDecoder(nn.Module):
         print(
             "Generating tokens with latent size",
             latent_embeds.shape,
-            embeds.shape,
-            self.position_ids.shape,
             max_new_tokens,
         )
         # Generate tokens one by one
