@@ -81,12 +81,6 @@ def parse_args():
         default="flash_attention_2",
         help="Attention implementation to use",
     )
-    parser.add_argument(
-        "--warmup-steps",
-        type=int,
-        default=1000,
-        help="Number of warmup steps",
-    )
     return parser.parse_args()
 
 
@@ -160,15 +154,10 @@ def calculate_completion_accuracy(generated_ids, target_ids):
     return matches / min_len if min_len > 0 else 0.0
 
 
-def training_step(
-    encoder, decoder, batch, tokenizer, device, current_step, warmup_steps, block_size
-):
+def training_step(encoder, decoder, batch, tokenizer, device):
     """Perform a single training step."""
-    n_mask = min(block_size, max(1, int(block_size * current_step / warmup_steps)))
     input_ids = batch.to(device)
     labels = batch.to(device)
-    input_ids[:, n_mask:] = tokenizer.pad_token_id
-    labels[:, n_mask:] = tokenizer.pad_token_id
     latent_embeds, kl_loss, latents = encoder(
         input_ids, pad_token_id=tokenizer.pad_token_id
     )
@@ -392,9 +381,6 @@ def main():
                 batch,
                 tokenizer,
                 DEVICE,
-                current_step,
-                args.warmup_steps,
-                args.block_size,
             )
         )
         latent_embeds_mean = latent_embeds[0, :, :].mean()
