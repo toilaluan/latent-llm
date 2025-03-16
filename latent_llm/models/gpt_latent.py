@@ -549,8 +549,10 @@ class GPTLatentVAEPipeline:
         # Load tokenizer from encoder or decoder model
         if pretrained_encoder_id:
             self.tokenizer = AutoTokenizer.from_pretrained(pretrained_encoder_id)
+            self.tokenizer.padding_side = "right"
         elif pretrained_decoder_id:
             self.tokenizer = AutoTokenizer.from_pretrained(pretrained_decoder_id)
+            self.tokenizer.padding_side = "right"
 
     def _load_encoder(self):
         """Load the encoder model if not already loaded."""
