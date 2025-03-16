@@ -27,6 +27,7 @@ class TextDataset(Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.block_size = block_size
+        self.statistics = self.get_statistics()
 
     def get_statistics(self):
         total_tokens = 0
