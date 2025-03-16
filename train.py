@@ -154,22 +154,6 @@ def calculate_completion_accuracy(generated_ids, target_ids):
     return matches / min_len if min_len > 0 else 0.0
 
 
-def training_step(encoder, decoder, batch, tokenizer, device):
-    """Perform a single training step."""
-    input_ids = batch.to(device)
-    labels = batch.clone().to(device)
-    labels[labels == tokenizer.pad_token_id] = -100
-    latent_embeds, kl_loss, latents = encoder(
-        input_ids, pad_token_id=tokenizer.pad_token_id
-    )
-    logits, loss, token_accuracy = decoder(
-        input_ids, latent_embeds, labels=labels, ignore_index=-100
-    )
-    # Combine reconstruction loss with KL divergence loss
-    total_loss = loss + kl_loss
-    return total_loss, loss, kl_loss, latent_embeds, input_ids, token_accuracy
-
-
 def count_parameters(model):
     """Count total and trainable parameters in a model."""
     total_params = sum(p.numel() for p in model.parameters())
@@ -208,6 +192,30 @@ def log_parameter_counts(encoder, decoder):
     )
 
 
+def training_step(encoder, decoder, batch, tokenizer, device):
+    """Perform a single training step."""
+    input_ids = batch.to(device)
+    labels = batch.clone().to(device)
+    labels[labels == tokenizer.pad_token_id] = -100
+    r_latent_embeds, kl_loss, latent_embeds = encoder(
+        input_ids, pad_token_id=tokenizer.pad_token_id
+    )
+    logits, loss, token_accuracy = decoder(
+        input_ids, r_latent_embeds, labels=labels, ignore_index=-100
+    )
+    # Combine reconstruction loss with KL divergence loss
+    total_loss = loss + kl_loss
+    return {
+        "total_loss": total_loss,
+        "loss": loss,
+        "kl_loss": kl_loss,
+        "r_latent_embeds": r_latent_embeds,
+        "latent_embeds": latent_embeds,
+        "input_ids": input_ids,
+        "token_accuracy": token_accuracy,
+    }
+
+
 def validate(encoder, decoder, val_dataloader, tokenizer, args):
     """Run validation and log metrics."""
     encoder.eval()
@@ -226,41 +234,29 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
             if i >= n_samples:
                 break
             i += 1
-            val_sample = batch.to(DEVICE)
-            labels = val_sample.clone()
-            labels[labels == tokenizer.pad_token_id] = -100
             # Get latent representation
-            rep_latent_embeds, kl_loss, latent_embeds = encoder(
-                val_sample, pad_token_id=tokenizer.pad_token_id
-            )
-            # Calculate reconstruction loss
-            logits, loss, token_acc = decoder(
-                val_sample,
-                rep_latent_embeds,
-                labels=labels,
-                ignore_index=-100,
-            )
-            latent_mean = latent_embeds[0, :, :].mean()
-            latent_std = latent_embeds[0, :, :].std()
+            output = training_step(encoder, decoder, batch, tokenizer, DEVICE)
+            latent_mean = output["latent_embeds"][0, :, :].mean()
+            latent_std = output["latent_embeds"][0, :, :].std()
             logger.info(
                 f"latent_mean: {latent_mean.item():.4f}; latent_std: {latent_std.item():.4f}"
             )
 
             # Generate completion from reparametrized latent embeddings
             rep_generated_ids = decoder.generate(
-                rep_latent_embeds[:1],
+                output["r_latent_embeds"][:1],
                 max_new_tokens=encoder.block_size,
             )[0].tolist()
 
             # Calculate completion accuracy
-            target_ids = val_sample[0].tolist()
+            target_ids = batch[0].tolist()
             sample_completion_acc_rep = calculate_completion_accuracy(
                 rep_generated_ids, target_ids
             )
 
             # Generate completion from original latent embeddings
             generated_ids = decoder.generate(
-                latent_embeds[:1],
+                output["latent_embeds"][:1],
                 max_new_tokens=encoder.block_size,
             )[0].tolist()
 
@@ -269,10 +265,10 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
             )
 
             # Accumulate metrics
-            val_total_loss += loss.item() + kl_loss.item()
-            val_rec_loss += loss.item()
-            val_kl_loss += kl_loss.item()
-            val_token_accuracy += token_acc.item()
+            val_total_loss += output["total_loss"].item()
+            val_rec_loss += output["loss"].item()
+            val_kl_loss += output["kl_loss"].item()
+            val_token_accuracy += output["token_accuracy"].item()
             val_completion_accuracy += sample_completion_acc
             val_completion_accuracy_rep += sample_completion_acc_rep
         # Average metrics
@@ -376,28 +372,26 @@ def main():
     start_time = time.time()
     for batch in train_dataloader:
         optimizer.zero_grad()
-        total_loss, rec_loss, kl_loss, latent_embeds, input_ids, token_accuracy = (
-            training_step(
-                encoder,
-                decoder,
-                batch,
-                tokenizer,
-                DEVICE,
-            )
+        output = training_step(
+            encoder,
+            decoder,
+            batch,
+            tokenizer,
+            DEVICE,
         )
-        latent_embeds_mean = latent_embeds[0, :, :].mean()
-        latent_embeds_std = latent_embeds[0, :, :].std()
+        latent_embeds_mean = output["latent_embeds"][0, :, :].mean()
+        latent_embeds_std = output["latent_embeds"][0, :, :].std()
         wandb.log(
             {
-                "train/total_loss": total_loss.item(),
-                "train/reconstruction_loss": rec_loss.item(),
-                "train/kl_loss": kl_loss.item(),
-                "train/token_accuracy": token_accuracy.item(),
+                "train/total_loss": output["total_loss"].item(),
+                "train/reconstruction_loss": output["loss"].item(),
+                "train/kl_loss": output["kl_loss"].item(),
+                "train/token_accuracy": output["token_accuracy"].item(),
                 "train/latent_embeds_mean": latent_embeds_mean.item(),
                 "train/latent_embeds_std": latent_embeds_std.item(),
             }
         )
-        total_loss.backward()
+        output["total_loss"].backward()
         if args.use_grad_norm:
             torch.nn.utils.clip_grad_norm_(train_params, args.max_grad_norm)
         optimizer.step()
@@ -406,7 +400,7 @@ def main():
 
         if current_step % args.log_interval == 0:
             logger.info(
-                f"[{current_step}/{args.training_steps}] total_loss: {total_loss.item():.4f}; rec_loss: {rec_loss.item():.4f}; kl_loss: {kl_loss.item():.4f}; token_accuracy: {token_accuracy.item():.4f}; {token_per_second:.2f} tokens/s (processed {processed_tokens} tokens)"
+                f"[{current_step}/{args.training_steps}] total_loss: {output['total_loss'].item():.4f}; rec_loss: {output['loss'].item():.4f}; kl_loss: {output['kl_loss'].item():.4f}; token_accuracy: {output['token_accuracy'].item():.4f}; {token_per_second:.2f} tokens/s (processed {processed_tokens} tokens)"
             )
             logger.info(
                 f"latent_embeds_mean: {latent_embeds_mean.item():.4f}; latent_embeds_std: {latent_embeds_std.item():.4f}"
