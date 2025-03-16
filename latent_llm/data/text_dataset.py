@@ -27,7 +27,7 @@ class TextDataset(Dataset):
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
         self.block_size = block_size
-        self.statistics = self.get_statistics()
+        self.get_statistics()
 
     def get_statistics(self):
         total_tokens = 0
@@ -52,26 +52,7 @@ class TextDataset(Dataset):
         print(f"  Min tokens: {token_counts.min().item()}")
         print(f"  Max tokens: {token_counts.max().item()}")
         print(f"  Median tokens: {token_counts.median().item()}")
-        print(f"  Std dev: {token_counts.std().item():.2f}")
-        print(
-            f"  25th percentile: {torch.quantile(token_counts.float(), 0.25).item():.2f}"
-        )
-        print(
-            f"  75th percentile: {torch.quantile(token_counts.float(), 0.75).item():.2f}"
-        )
         print(f"  Fill rate: {(avg_tokens / self.block_size) * 100:.2f}%")
-
-        return {
-            "avg_tokens": avg_tokens,
-            "avg_padding": avg_padding,
-            "min_tokens": token_counts.min().item(),
-            "max_tokens": token_counts.max().item(),
-            "median_tokens": token_counts.median().item(),
-            "std_dev": token_counts.std().item(),
-            "25th_percentile": torch.quantile(token_counts.float(), 0.25).item(),
-            "75th_percentile": torch.quantile(token_counts.float(), 0.75).item(),
-            "fill_rate": (avg_tokens / self.block_size) * 100,
-        }
 
     def __len__(self):
         return len(self.dataset)
