@@ -279,6 +279,7 @@ class LatentDecoder(nn.Module):
         self.mid_tokens = nn.Parameter(
             torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
         )
+        self.mid_token_size = mid_token_size
         self.init_position_ids()
 
     def freeze_base_model(self):
