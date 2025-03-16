@@ -555,7 +555,7 @@ class GPTLatentVAEPipeline:
 
             self.decoder = LatentDecoder(
                 model_name=model_name,
-                n_gist_tokens=config["n_gist_tokens"],
+                latent_size=config["latent_size"],
                 block_size=config["block_size"],
                 torch_dtype=self.torch_dtype,
             )
