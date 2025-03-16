@@ -417,10 +417,12 @@ def evaluate(
 
     # Generate completions
     generated_suffixes = []
+    true_latent_suffixes = []  # Store outputs from true latents
     latent_means = []
     latent_stds = []
     for i in range(min(args.num_samples, len(prefix_tokens))):
         prefix = prefix_tokens[i : i + 1]  # Keep batch dimension
+        suffix = suffix_tokens[i : i + 1]  # Keep batch dimension
 
         # Generate initial noise
         B, T, D = 1, model.latent_size, model.base_config.hidden_size
@@ -432,8 +434,7 @@ def evaluate(
                 input_ids=prefix, initial_noise=initial_noise, num_steps=args.max_steps
             )
 
-            predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
-            # No need to rescale, use latents directly
+            predicted_latents = predicted_latents / VAE_SCALE - VAE_SHIFT
             # Track latent statistics
             latent_means.append(predicted_latents.mean().item())
             latent_stds.append(predicted_latents.std().item())
@@ -442,9 +443,24 @@ def evaluate(
                 predicted_latents, max_new_tokens=50, temperature=0.0
             )
 
+            # Also get true suffix latents and decode them to validate decoder
+            true_rep_latents, _, true_clean_latents = encoder(
+                suffix, tokenizer.pad_token_id
+            )
+            # Use clean latents from encoder
+            true_output_ids = decoder.generate(
+                true_clean_latents, max_new_tokens=50, temperature=0.0
+            )
+
         # Decode generated text
         generated_suffix = tokenizer.decode(output_ids[0], skip_special_tokens=True)
         generated_suffixes.append(generated_suffix)
+
+        # Decode true latent output
+        true_latent_suffix = tokenizer.decode(
+            true_output_ids[0], skip_special_tokens=True
+        )
+        true_latent_suffixes.append(true_latent_suffix)
 
     # Decode prefixes for context
     prefixes = []
@@ -463,6 +479,7 @@ def evaluate(
                 {
                     "prefix": prefixes[i],
                     "true_suffix": true_suffixes[i],
+                    "true_latent_decoded": true_latent_suffixes[i],
                     "generated_suffix": generated_suffixes[i],
                 }
             )
@@ -474,7 +491,12 @@ def evaluate(
             {
                 "examples": wandb.Table(
                     dataframe=examples_df,
-                    columns=["prefix", "true_suffix", "generated_suffix"],
+                    columns=[
+                        "prefix",
+                        "true_suffix",
+                        "true_latent_decoded",
+                        "generated_suffix",
+                    ],
                 ),
                 "eval/epoch": epoch,
                 "eval/step": step,
@@ -498,6 +520,7 @@ def evaluate(
     for i in range(len(prefixes)):
         print(f"Prefix: {prefixes[i]}")
         print(f"True suffix: {true_suffixes[i]}")
+        print(f"True latent decoded: {true_latent_suffixes[i]}")
         print(f"Generated: {generated_suffixes[i]}")
         print("---")
 
