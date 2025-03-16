@@ -317,7 +317,7 @@ def train_one_epoch(
             timesteps = torch.randint(
                 1, args.max_steps + 1, (batch_size,), device=device
             ).tolist()
-
+            print(f"Timesteps: {timesteps}")
             timesteps_histogram.extend(timesteps)
 
             # Log wandb timesteps
