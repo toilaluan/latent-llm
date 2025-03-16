@@ -68,7 +68,7 @@ def main():
 
     # Encode input text to latent representation
     logger.info("Encoding input text to latent representation...")
-    latent_embeds, _ = pipeline.encode(input_text)
+    _, latent_embeds = pipeline.encode(input_text)
 
     print(latent_embeds.mean(), latent_embeds.std())
 
