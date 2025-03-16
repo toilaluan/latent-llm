@@ -246,6 +246,7 @@ class LatentEncoder(nn.Module):
             tensors = load_file(tokens_path)
             if "latent_tokens_mean" in tensors:
                 # New VAE format
+                print("New VAE format")
                 self.latent_tokens_mean.data = tensors["latent_tokens_mean"]
                 self.latent_tokens_logvar.data = tensors["latent_tokens_logvar"]
             else:
