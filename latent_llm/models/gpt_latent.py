@@ -33,8 +33,16 @@ class LatentEncoder(nn.Module):
             torch_dtype=torch_dtype,
             attn_implementation=attn_implementation,
         )
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.base_config = self.model.config
+        self.latent_transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                self.base_config.hidden_size,
+                nhead=12,
+                dim_feedforward=2 * self.base_config.hidden_size,
+            ),
+            num_layers=3,
+        )
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         # For VAE, we need separate parameters for mean and log variance
         self.latent_tokens_mean = nn.Parameter(
             torch.randn(latent_size, self.base_config.hidden_size, dtype=torch_dtype)
@@ -136,6 +144,9 @@ class LatentEncoder(nn.Module):
 
         # Get the hidden states for gist tokens
         latents = last_hidden_states[:, -self.latent_size :, :]
+
+
+        latents = self.latent_transformer(latents)
 
         logvar = self.latent_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
 
