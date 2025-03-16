@@ -34,15 +34,6 @@ class LatentEncoder(nn.Module):
             attn_implementation=attn_implementation,
         )
         self.base_config = self.model.config
-        self.latent_transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                self.base_config.hidden_size,
-                nhead=4,
-                dim_feedforward=self.base_config.hidden_size,
-                bias=False,
-            ),
-            num_layers=3,
-        ).to(dtype=torch_dtype)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         # For VAE, we need separate parameters for mean and log variance
         self.latent_tokens_mean = nn.Parameter(
@@ -146,7 +137,7 @@ class LatentEncoder(nn.Module):
         # Get the hidden states for gist tokens
         latents = last_hidden_states[:, -self.latent_size :, :]
 
-        latents = self.latent_transformer(latents)
+        # latents = self.latent_transformer(latents)
 
         logvar = self.latent_tokens_logvar.unsqueeze(0).expand(B, -1, -1)
 
@@ -270,6 +261,33 @@ class LatentEncoder(nn.Module):
             raise ValueError(f"Could not find latent_tokens.safetensors in {repo_id}")
 
 
+class LatentProjector(nn.Module):
+    def __init__(
+        self,
+        hidden_size: int,
+        latent_size: int,
+        torch_dtype: torch.dtype = torch.bfloat16,
+    ):
+        # mlp style with residual connection
+        super().__init__()
+        self.linear1 = nn.Linear(
+            hidden_size, latent_size, dtype=torch_dtype, bias=False
+        )
+        self.linear2 = nn.Linear(
+            latent_size, latent_size, dtype=torch_dtype, bias=False
+        )
+        self.ln_1 = nn.LayerNorm(latent_size, dtype=torch_dtype)
+        self.ln_2 = nn.LayerNorm(latent_size, dtype=torch_dtype)
+
+    def _init_weights(self):
+        # std 0.02
+        nn.init.normal_(self.linear1.weight, std=0.02)
+        nn.init.normal_(self.linear2.weight, std=0.02)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.linear2(x + self.ln_2(self.linear1(self.ln_1(x))))
+
+
 class LatentDecoder(nn.Module):
     def __init__(
         self,
@@ -293,10 +311,8 @@ class LatentDecoder(nn.Module):
             torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
         )
         self.mid_token_size = mid_token_size
-        self.latent_proj = nn.Sequential(
-            nn.Linear(self.base_config.hidden_size, self.base_config.hidden_size),
-            nn.SiLU(),
-            nn.Linear(self.base_config.hidden_size, self.base_config.hidden_size),
+        self.latent_proj = LatentProjector(
+            self.base_config.hidden_size, self.base_config.hidden_size, torch_dtype
         )
         self.init_position_ids()
 
@@ -324,6 +340,7 @@ class LatentDecoder(nn.Module):
         ignore_index: int = -100,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         B, T = input_ids.size()
+        latent_embeds = self.latent_proj(latent_embeds)
         context_embeds = self.model.get_input_embeddings()(input_ids)
         embeds = torch.cat(
             [
