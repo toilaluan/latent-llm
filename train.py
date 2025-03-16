@@ -120,7 +120,7 @@ def setup_datasets(args, tokenizer, block_size=16):
         block_size=args.block_size,
         dataset_id=args.dataset_id,
         split="train",
-        random_masking=False,
+        random_masking=True,
     )
     logger.info(f"Training sample: {train_dataset[0]}")
     train_dataloader = DataLoader(
