@@ -431,7 +431,7 @@ def evaluate(
         # Sample using flow matching
         with torch.no_grad():
             predicted_latents = model.sample(
-                input_ids=prefix, initial_noise=initial_noise, num_steps=100
+                input_ids=prefix, initial_noise=initial_noise, num_steps=args.max_steps
             )
 
             predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
