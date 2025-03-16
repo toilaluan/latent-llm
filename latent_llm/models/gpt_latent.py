@@ -362,7 +362,7 @@ class LatentDecoder(nn.Module):
         # Align last latent token with first label token
         logits = self.model(inputs_embeds=embeds).logits
         logits = logits[
-            :, self.latent_size + self.mid_token_size + 1 : -1, :
+            :, self.latent_size + self.mid_token_size - 1 : -1, :
         ]  # Modified slice
 
         if labels is not None:
