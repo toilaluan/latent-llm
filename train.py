@@ -134,6 +134,7 @@ def setup_datasets(args, tokenizer, block_size=16):
         block_size=args.block_size,
         dataset_id=args.dataset_id,
         split="train",
+        random_masking=False,
     )
     val_dataloader = DataLoader(
         val_dataset,

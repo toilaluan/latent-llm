@@ -22,11 +22,13 @@ class TextDataset(Dataset):
         split: str,
         model_name: str,
         block_size: int = 1024,
+        random_masking: bool = True,
     ):
         self.dataset = load_dataset(dataset_id, split=split, num_proc=NUM_PROC)
         self.tokenizer = get_tokenizer(model_name)
         self.block_size = block_size
         self.get_statistics()
+        self.random_masking = random_masking
 
     def get_statistics(self):
         total_tokens = 0
@@ -71,7 +73,7 @@ class TextDataset(Dataset):
         ).input_ids
 
         r = random.random()
-        if r < 0.7:
+        if r < 0.7 and self.random_masking:
             beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
             ratio = np.random.beta(beta_a, beta_b)
             n_tokens = max(1, int(ratio * self.block_size))
