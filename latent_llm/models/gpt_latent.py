@@ -404,7 +404,7 @@ class LatentDecoder(nn.Module):
         # Save decoder-specific tensors using safetensors
         tensors = {
             "mid_tokens": self.mid_tokens.data,
-            "latent_proj": self.latent_proj.state_dict(),
+            **self._get_proj_state_dict(),
         }
         save_path = os.path.join(full_ckpt_path, "decoder_tokens.safetensors")
         save_file(tensors, save_path)
@@ -434,40 +434,14 @@ class LatentDecoder(nn.Module):
             path_in_repo="decoder_config.json",
         )
 
-    @classmethod
-    def from_pretrained(
-        cls,
-        repo_id: str,
-        torch_dtype: torch.dtype = torch.bfloat16,
-        device: str = "cuda",
-    ):
-        """Create a LatentDecoder instance from a pretrained model on the Hub."""
-        # Download config
-        try:
-            config_path = snapshot_download(
-                repo_id=repo_id, allow_patterns=["decoder_config.json"]
-            )
-            config_path = os.path.join(config_path, "decoder_config.json")
-            import json
-
-            with open(config_path, "r") as f:
-                config = json.load(f)
-        except Exception as e:
-            raise ValueError(f"Could not find decoder_config.json in {repo_id}") from e
-
-        # Create instance with loaded config
-        instance = cls(
-            model_name=repo_id,  # Use repo_id as model_name for base model
-            latent_size=config["latent_size"],
-            block_size=config["block_size"],
-            torch_dtype=torch_dtype,
-            mid_token_size=config["mid_token_size"],
-        )
-
-        # Load decoder-specific weights
-        instance.load_pretrained(repo_id)
-        instance.to(device)
-        return instance
+    def _get_proj_state_dict(self):
+        """Extract projection layer parameters with clear naming"""
+        return {
+            "proj.0.weight": self.latent_proj[0].weight.data,
+            "proj.0.bias": self.latent_proj[0].bias.data,
+            "proj.2.weight": self.latent_proj[2].weight.data,
+            "proj.2.bias": self.latent_proj[2].bias.data,
+        }
 
     def load_pretrained(self, repo_id: str):
         # Download safetensors file
@@ -481,7 +455,14 @@ class LatentDecoder(nn.Module):
         if os.path.exists(tokens_path):
             tensors = load_file(tokens_path)
             self.mid_tokens.data = tensors["mid_tokens"]
-            self.latent_proj.load_state_dict(tensors["latent_proj"])
+
+            # Reconstruct state dict from named parameters
+            proj_state_dict = {
+                k.replace("proj.", ""): v
+                for k, v in tensors.items()
+                if k.startswith("proj.")
+            }
+            self.latent_proj.load_state_dict(proj_state_dict)
             print(f"Loaded decoder weights from {tokens_path}")
         else:
             raise ValueError(f"Could not find decoder_tokens.safetensors in {repo_id}")
