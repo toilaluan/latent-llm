@@ -41,7 +41,7 @@ class LatentEncoder(nn.Module):
                 dim_feedforward=2 * self.base_config.hidden_size,
             ),
             num_layers=3,
-        )
+        ).to(dtype=torch_dtype)
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         # For VAE, we need separate parameters for mean and log variance
         self.latent_tokens_mean = nn.Parameter(
