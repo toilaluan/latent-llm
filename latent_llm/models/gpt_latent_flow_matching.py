@@ -11,7 +11,7 @@ class GPTLatentFlowMatching(nn.Module):
     def __init__(
         self,
         model_name: str,
-        n_gist_tokens: int,
+        latent_size: int,
         block_size: int,
         max_steps: int = 1000,
         timestep_token_size: int = 4,
@@ -25,7 +25,7 @@ class GPTLatentFlowMatching(nn.Module):
     ):
         super().__init__()
         self.model_name = model_name
-        self.n_gist_tokens = n_gist_tokens
+        self.latent_size = latent_size
         self.block_size = block_size
         self.max_steps = max_steps
         self.timestep_token_size = timestep_token_size
@@ -40,10 +40,6 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Apply LoRA if requested
         if use_lora:
-            if lora_target_modules is None:
-                # Default target modules for typical transformer models
-                lora_target_modules = ["q_proj", "v_proj", "k_proj", "o_proj"]
-
             lora_config = LoraConfig(
                 task_type=TaskType.CAUSAL_LM,
                 r=lora_r,
@@ -62,7 +58,7 @@ class GPTLatentFlowMatching(nn.Module):
             dtype=torch_dtype,
         )
         torch.nn.init.kaiming_normal_(self.timestep_embeddings.weight)
-        self.latent_shape = (self.n_gist_tokens, self.base_config.hidden_size)
+        self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         # if timestep is 1, return self.timestep_embeddings([0,1,..,timestep_token_size-1])
@@ -187,15 +183,22 @@ class GPTLatentFlowMatching(nn.Module):
         return F.mse_loss(predicted_vector_field, target_vector_field)
 
     def sample(
-        self, input_ids: torch.Tensor, initial_noise: torch.Tensor, num_steps: int = 100
+        self,
+        input_ids: torch.Tensor,
+        initial_noise: torch.Tensor,
+        num_steps: int = 100,
+        method: str = "euler",
+        schedule: str = "linear",
     ) -> torch.Tensor:
         """
-        Sample from the model using Euler integration.
+        Sample from the model using numerical integration.
 
         Args:
             input_ids: Input token IDs [B, S]
             initial_noise: Initial noise to start sampling from [B, T, D]
             num_steps: Number of steps for the integration
+            method: Integration method ('euler' or 'heun')
+            schedule: Sampling schedule ('linear' or 'quadratic')
 
         Returns:
             Sampled latent vectors
@@ -206,12 +209,30 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Start with random noise
         current_latent = initial_noise
-        step_size = 1.0 / num_steps
 
-        # Euler integration
-        for step in range(num_steps, 0, -1):
+        # Set up timesteps based on schedule
+        if schedule == "linear":
+            timesteps = torch.linspace(
+                num_steps, 1, num_steps, device=self.device
+            ).int()
+        elif schedule == "quadratic":
+            timesteps = torch.linspace(0, 1, num_steps, device=self.device)
+            timesteps = ((1 - timesteps) ** 2 * num_steps).int().clip(min=1)
+        else:
+            raise ValueError(f"Unknown schedule: {schedule}")
+
+        # Calculate step sizes (may vary with non-linear schedules)
+        step_sizes = []
+        for i in range(len(timesteps) - 1):
+            step_sizes.append(
+                (timesteps[i] - timesteps[i + 1]).float() / self.max_steps
+            )
+        step_sizes.append(timesteps[-1].float() / self.max_steps)  # Last step
+
+        # Integration loop
+        for i, step in enumerate(timesteps):
             # Current timestep for all items in batch
-            timesteps = [step] * input_ids.shape[0]
+            batch_timesteps = [step.item()] * input_ids.shape[0]
 
             # Get vector field at current point
             with torch.no_grad():
@@ -219,11 +240,41 @@ class GPTLatentFlowMatching(nn.Module):
                     input_ids=input_ids,
                     attention_mask=attention_mask,
                     latents=current_latent,
-                    timesteps=timesteps,
+                    timesteps=batch_timesteps,
                 )
 
-            # Update using Euler method (negative sign for correct flow direction)
-            current_latent = current_latent - step_size * vector_field
+            # Update using selected integration method
+            if method == "euler":
+                # Basic Euler method
+                current_latent = current_latent - step_sizes[i] * vector_field
+            elif method == "heun":
+                # Heun's method (second-order Runge-Kutta)
+                # Only use for steps except the last one
+                if i < len(timesteps) - 1:
+                    # Predicted next point using Euler
+                    next_point = current_latent - step_sizes[i] * vector_field
+
+                    # Get next timestep
+                    next_timestep = timesteps[i + 1].item()
+                    next_batch_timesteps = [next_timestep] * input_ids.shape[0]
+
+                    # Get vector field at predicted next point
+                    with torch.no_grad():
+                        next_vector_field = self.forward(
+                            input_ids=input_ids,
+                            attention_mask=attention_mask,
+                            latents=next_point,
+                            timesteps=next_batch_timesteps,
+                        )
+
+                    # Average vector fields and take step
+                    avg_vector_field = 0.5 * (vector_field + next_vector_field)
+                    current_latent = current_latent - step_sizes[i] * avg_vector_field
+                else:
+                    # For the last step, just use Euler
+                    current_latent = current_latent - step_sizes[i] * vector_field
+            else:
+                raise ValueError(f"Unknown integration method: {method}")
 
         return current_latent
 
@@ -232,7 +283,7 @@ class GPTLatentFlowMatching(nn.Module):
         cls,
         model_path: str,
         base_model_name: str,
-        n_gist_tokens: int,
+        latent_size: int,
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
@@ -256,7 +307,7 @@ class GPTLatentFlowMatching(nn.Module):
         # Initialize with base model
         model = cls(
             model_name=base_model_name,
-            n_gist_tokens=n_gist_tokens,
+            latent_size=latent_size,
             block_size=block_size,
             torch_dtype=torch_dtype,
             device=device,
@@ -304,7 +355,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         config = {
             "model_name": self.model_name,
-            "n_gist_tokens": self.n_gist_tokens,
+            "latent_size": self.latent_size,
             "block_size": self.block_size,
             "max_steps": self.max_steps,
             "timestep_token_size": self.timestep_token_size,
@@ -378,7 +429,7 @@ class GPTLatentFlowMatchingPipeline:
                 self.flow_model = GPTLatentFlowMatching.from_pretrained(
                     model_path=flow_matching_model_id,
                     base_model_name=flow_config["model_name"],
-                    n_gist_tokens=self.config["n_gist_tokens"],
+                    latent_size=self.config["latent_size"],
                     block_size=self.config["block_size"],
                     torch_dtype=torch_dtype,
                     device=device,
@@ -387,7 +438,7 @@ class GPTLatentFlowMatchingPipeline:
             else:
                 self.flow_model = GPTLatentFlowMatching(
                     model_name=flow_config["model_name"],
-                    n_gist_tokens=self.config["n_gist_tokens"],
+                    latent_size=self.config["latent_size"],
                     block_size=self.config["block_size"],
                     torch_dtype=torch_dtype,
                     device=device,
@@ -415,7 +466,7 @@ class GPTLatentFlowMatchingPipeline:
                 self.flow_model = GPTLatentFlowMatching.from_pretrained(
                     model_path=flow_matching_model_id,
                     base_model_name=flow_config["model_name"],
-                    n_gist_tokens=self.config["n_gist_tokens"],
+                    latent_size=self.config["latent_size"],
                     block_size=self.config["block_size"],
                     torch_dtype=torch_dtype,
                     device=device,
@@ -425,7 +476,7 @@ class GPTLatentFlowMatchingPipeline:
                 # Initialize model
                 self.flow_model = GPTLatentFlowMatching(
                     model_name=flow_config["model_name"],
-                    n_gist_tokens=self.config["n_gist_tokens"],
+                    latent_size=self.config["latent_size"],
                     block_size=self.config["block_size"],
                     torch_dtype=torch_dtype,
                     device=device,
@@ -450,7 +501,7 @@ class GPTLatentFlowMatchingPipeline:
             # Create decoder from same base model
             self.decoder = LatentDecoder(
                 model_name=decoder_model_id,
-                n_gist_tokens=self.config["n_gist_tokens"],
+                latent_size=self.config["latent_size"],
                 block_size=self.config["block_size"],
                 torch_dtype=torch_dtype,
             )
@@ -458,7 +509,7 @@ class GPTLatentFlowMatchingPipeline:
             # Load separate decoder
             self.decoder = LatentDecoder(
                 model_name=decoder_model_id,
-                n_gist_tokens=self.config["n_gist_tokens"],
+                latent_size=self.config["latent_size"],
                 block_size=self.config["block_size"],
                 torch_dtype=torch_dtype,
             )
@@ -537,7 +588,7 @@ class GPTLatentFlowMatchingPipeline:
         B, S = prefix_tokens.shape
         initial_noise = torch.randn(
             B,
-            self.flow_model.n_gist_tokens,
+            self.flow_model.latent_size,
             self.flow_model.base_config.hidden_size,
             device=self.device,
         )

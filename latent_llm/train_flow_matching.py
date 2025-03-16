@@ -12,9 +12,6 @@ from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
-VAE_SHIFT = 0
-VAE_SCALE = 1.0
-
 
 class TextCompletionDataset(Dataset):
     def __init__(
@@ -250,7 +247,7 @@ def parse_args():
     parser.add_argument(
         "--max_steps",
         type=int,
-        default=1000,
+        default=50,
         help="Maximum number of steps",
     )
 
@@ -298,8 +295,11 @@ def train_one_epoch(
         print(suffix_tokens[0])
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
-            suffix_latents, _, _ = encoder(suffix_tokens, tokenizer.pad_token_id)
-            suffix_latents = (suffix_latents - VAE_SHIFT) / VAE_SCALE
+            rep_latents, _, clean_latents = encoder(
+                suffix_tokens, tokenizer.pad_token_id
+            )
+            # Use the reparameterized latents directly from the VAE
+            suffix_latents = rep_latents
             vae_mean = suffix_latents.mean().item()
             vae_std = suffix_latents.std().item()
 
@@ -421,7 +421,7 @@ def evaluate(
         prefix = prefix_tokens[i : i + 1]  # Keep batch dimension
 
         # Generate initial noise
-        B, T, D = 1, model.n_gist_tokens, model.base_config.hidden_size
+        B, T, D = 1, model.latent_size, model.base_config.hidden_size
         initial_noise = torch.randn(B, T, D, device=device)
 
         # Sample using flow matching
@@ -429,7 +429,7 @@ def evaluate(
             predicted_latents = model.sample(
                 input_ids=prefix, initial_noise=initial_noise, num_steps=100
             )
-            predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
+            # No need to rescale, use latents directly
             # Track latent statistics
             latent_means.append(predicted_latents.mean().item())
             latent_stds.append(predicted_latents.std().item())
@@ -607,7 +607,7 @@ def main():
     # Create decoder
     decoder = LatentDecoder(
         model_name=decoder_id,
-        n_gist_tokens=encoder_config["n_gist_tokens"],
+        latent_size=encoder_config["latent_size"],
         block_size=encoder_config["block_size"],
         torch_dtype=torch_dtype,
     )
@@ -618,7 +618,7 @@ def main():
     print(f"Creating flow matching model based on {args.model_name}...")
     flow_model = GPTLatentFlowMatching(
         model_name=args.model_name,
-        n_gist_tokens=encoder_config["n_gist_tokens"],
+        latent_size=encoder_config["latent_size"],
         block_size=encoder_config["block_size"],
         max_steps=args.max_steps,
         device=device,
