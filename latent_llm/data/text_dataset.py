@@ -63,6 +63,7 @@ class TextDataset(Dataset):
         words = text.split()
         random.shuffle(words)
         text = " ".join(words)
+        text = text[: self.block_size * 5]
         input_ids = self.tokenizer(
             text,
             return_tensors="pt",
