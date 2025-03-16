@@ -71,17 +71,12 @@ class TextDataset(Dataset):
             add_special_tokens=True,
         ).input_ids
 
-        # Better approach 1: Natural distribution
-        # Use a more natural distribution like beta or triangular
-        beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
-        ratio = np.random.beta(beta_a, beta_b)
-        n_tokens = max(1, int(ratio * self.block_size))
-
-        # Alternative: Triangular distribution
-        # n_tokens = random.triangular(1, self.block_size, self.block_size * 0.8)
-        # n_tokens = max(1, int(n_tokens))
-
-        input_ids[:, n_tokens:] = self.tokenizer.pad_token_id
+        r = random.random()
+        if r < 0.7:
+            beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
+            ratio = np.random.beta(beta_a, beta_b)
+            n_tokens = max(1, int(ratio * self.block_size))
+            input_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
 
