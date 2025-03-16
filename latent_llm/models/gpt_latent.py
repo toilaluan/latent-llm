@@ -127,14 +127,10 @@ class LatentEncoder(nn.Module):
         masks = torch.cat(
             [masks, torch.ones(B, self.latent_size, device=masks.device)], dim=1
         )
-        position_ids = (
-            self.position_ids[: inputs_embeds.size(1)].unsqueeze(0).expand(B, -1)
-        )
         last_hidden_states = self.model(
             inputs_embeds=inputs_embeds,
             output_hidden_states=True,
             attention_mask=masks,
-            position_ids=position_ids,
         ).hidden_states[-1]
 
         # Get the hidden states for gist tokens
