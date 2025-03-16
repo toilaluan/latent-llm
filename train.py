@@ -156,12 +156,13 @@ def calculate_completion_accuracy(generated_ids, target_ids):
 def training_step(encoder, decoder, batch, tokenizer, device):
     """Perform a single training step."""
     input_ids = batch.to(device)
-    labels = batch.to(device)
+    labels = batch.clone().to(device)
+    labels[labels == tokenizer.pad_token_id] = -100
     latent_embeds, kl_loss, latents = encoder(
         input_ids, pad_token_id=tokenizer.pad_token_id
     )
     logits, loss, token_accuracy = decoder(
-        input_ids, latent_embeds, labels=labels, ignore_index=tokenizer.pad_token_id
+        input_ids, latent_embeds, labels=labels, ignore_index=-100
     )
     # Combine reconstruction loss with KL divergence loss
     total_loss = loss + kl_loss
@@ -225,7 +226,8 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
                 break
             i += 1
             val_sample = batch.to(DEVICE)
-
+            labels = val_sample.clone()
+            labels[labels == tokenizer.pad_token_id] = -100
             # Get latent representation
             rep_latent_embeds, kl_loss, latent_embeds = encoder(
                 val_sample, pad_token_id=tokenizer.pad_token_id
@@ -234,8 +236,8 @@ def validate(encoder, decoder, val_dataloader, tokenizer, args):
             logits, loss, token_acc = decoder(
                 val_sample,
                 rep_latent_embeds,
-                labels=val_sample,
-                ignore_index=tokenizer.pad_token_id,
+                labels=labels,
+                ignore_index=-100,
             )
             latent_mean = latent_embeds[0, :, :].mean()
             latent_std = latent_embeds[0, :, :].std()
