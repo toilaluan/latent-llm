@@ -393,7 +393,7 @@ class LatentDecoder(nn.Module):
         embeds = torch.cat(
             [
                 latent_embeds,
-                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
+                # self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
             ],
             dim=1,
         )
