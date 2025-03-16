@@ -574,25 +574,10 @@ class GPTLatentVAEPipeline:
     def _load_decoder(self):
         """Load the decoder model if not already loaded."""
         if self.decoder is None and self.pretrained_decoder_id:
-            # Get model name from repo ID (assuming format is consistent with LatentEncoder.from_pretrained)
-            model_name = self.pretrained_decoder_id
-
-            # Download config to get parameters
-            config_path = snapshot_download(
-                repo_id=self.pretrained_encoder_id,
-                allow_patterns=["latent_config.json"],
-            )
-            config_path = os.path.join(config_path, "latent_config.json")
-            import json
-
-            with open(config_path, "r") as f:
-                config = json.load(f)
-
-            self.decoder = LatentDecoder(
-                model_name=model_name,
-                latent_size=config["latent_size"],
-                block_size=config["block_size"],
+            self.decoder = LatentDecoder.from_pretrained(
+                self.pretrained_decoder_id,
                 torch_dtype=self.torch_dtype,
+                device=self.device,
             )
             self.decoder.eval()
             self.decoder.to(self.device)
