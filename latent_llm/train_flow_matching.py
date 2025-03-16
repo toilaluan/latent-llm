@@ -12,6 +12,9 @@ from latent_llm.models.gpt_latent import LatentEncoder, LatentDecoder
 from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
+VAE_SHIFT = 0
+VAE_SCALE = 1 / 2.1
+
 
 class TextCompletionDataset(Dataset):
     def __init__(
@@ -292,13 +295,15 @@ def train_one_epoch(
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
         suffix_tokens = batch["suffix"].to(device)
+        print(suffix_tokens[0])
         # Encode suffix tokens to latent space (target latents)
         with torch.no_grad():
             rep_latents, _, clean_latents = encoder(
                 suffix_tokens, tokenizer.pad_token_id
             )
             # Use the reparameterized latents directly from the VAE
-            suffix_latents = rep_latents
+            suffix_latents = clean_latents
+            suffix_latents = (suffix_latents + VAE_SHIFT) * VAE_SCALE
             vae_mean = suffix_latents.mean().item()
             vae_std = suffix_latents.std().item()
 
@@ -316,6 +321,7 @@ def train_one_epoch(
             timesteps = torch.randint(
                 1, args.max_steps + 1, (batch_size,), device=device
             ).tolist()
+            print(f"Timesteps: {timesteps}")
             timesteps_histogram.extend(timesteps)
 
             # Log wandb timesteps
@@ -425,8 +431,10 @@ def evaluate(
         # Sample using flow matching
         with torch.no_grad():
             predicted_latents = model.sample(
-                input_ids=prefix, initial_noise=initial_noise, num_steps=args.max_steps
+                input_ids=prefix, initial_noise=initial_noise, num_steps=100
             )
+
+            predicted_latents = (predicted_latents * VAE_SCALE) + VAE_SHIFT
             # No need to rescale, use latents directly
             # Track latent statistics
             latent_means.append(predicted_latents.mean().item())
