@@ -62,24 +62,34 @@ class GPTLatentFlowMatching(nn.Module):
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
-        # if timestep is 1, return self.timestep_embeddings([0,1,..,timestep_token_size-1])
-        # Return shape is [B, T, D]
-        timestep_tokens = []
+        """
+        Get embeddings for each timestep in the batch.
+
+        Args:
+            timesteps: List of timestep integers
+
+        Returns:
+            Tensor of timestep embeddings [B, timestep_token_size, D]
+        """
+        timestep_embeddings_list = []
         for timestep in timesteps:
-            print(f"Timestep: {timestep}")
-            indexes = list(
+            # Calculate token indices for this timestep
+            indices = list(
                 range(
                     (timestep - 1) * self.timestep_token_size,
                     timestep * self.timestep_token_size,
                 )
             )
-            print(f"Indexes: {indexes}")
-            timesteps = self.timestep_embeddings(
-                torch.tensor(indexes, device=self.device).long().unsqueeze(0)
-            )  # [1, T, D]
-            timestep_tokens.append(timesteps)
-        print(f"Timestep tokens shape: {timestep_tokens[0].shape}")
-        return torch.cat(timestep_tokens, dim=0)
+            # Get embeddings for these indices
+            timestep_emb = self.timestep_embeddings(
+                torch.tensor(indices, device=self.device).long().unsqueeze(0)
+            )  # Shape: [1, timestep_token_size, D]
+            timestep_embeddings_list.append(timestep_emb)
+
+        # Concatenate along batch dimension
+        return torch.cat(
+            timestep_embeddings_list, dim=0
+        )  # Shape: [B, timestep_token_size, D]
 
     def forward(
         self,
