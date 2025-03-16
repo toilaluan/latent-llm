@@ -53,7 +53,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.base_config = self.model.config
         self.timestep_embeddings = nn.Embedding(
-            num_embeddings=max_steps * timestep_token_size,
+            num_embeddings=(max_steps + 1) * timestep_token_size,
             embedding_dim=self.base_config.hidden_size,
             dtype=torch_dtype,
         )
