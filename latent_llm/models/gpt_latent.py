@@ -265,6 +265,7 @@ class LatentDecoder(nn.Module):
         block_size: int,
         torch_dtype: torch.dtype = torch.bfloat16,
         attn_implementation: str = "flash_attention_2",
+        mid_token_size: int = 16,
     ):
         super().__init__()
         self.model = AutoModelForCausalLM.from_pretrained(
@@ -275,7 +276,14 @@ class LatentDecoder(nn.Module):
         self.base_config = self.model.config
         self.latent_size = latent_size
         self.block_size = block_size
+        self.mid_tokens = nn.Parameter(
+            torch.randn(mid_token_size, self.base_config.hidden_size, dtype=torch_dtype)
+        )
         self.init_position_ids()
+
+    def freeze_base_model(self):
+        for param in self.model.parameters():
+            param.requires_grad = False
 
     def init_position_ids(self):
         step = max(self.block_size // self.latent_size, 1)
@@ -301,6 +309,7 @@ class LatentDecoder(nn.Module):
         embeds = torch.cat(
             [
                 latent_embeds,
+                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
                 context_embeds,
             ],
             dim=1,
@@ -309,7 +318,7 @@ class LatentDecoder(nn.Module):
             inputs_embeds=embeds,
             position_ids=self.position_ids[: embeds.size(1)].unsqueeze(0).expand(B, -1),
         ).logits
-        logits = logits[:, self.latent_size - 1 : -1, :]
+        logits = logits[:, self.latent_size + self.mid_token_size - 1 : -1, :]
         if labels is not None:
             loss = F.cross_entropy(
                 logits.reshape(-1, logits.size(-1)),
@@ -345,7 +354,13 @@ class LatentDecoder(nn.Module):
         max_new_tokens = min(
             max_new_tokens, self.position_ids.size(0) - latent_embeds.size(1)
         )
-        embeds = latent_embeds
+        embeds = torch.cat(
+            [
+                latent_embeds,
+                self.mid_tokens.unsqueeze(0).expand(B, -1, -1),
+            ],
+            dim=1,
+        )
         # Generate tokens one by one
         for _ in range(max_new_tokens):
             # Forward pass

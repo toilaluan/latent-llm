@@ -358,11 +358,9 @@ def main():
 
     # Setup models, tokenizer and datasets
     encoder, decoder = setup_models(args)
+    encoder.freeze_base_model()
     tokenizer = setup_tokenizer(args)
     train_dataloader, val_dataloader = setup_datasets(args, tokenizer)
-
-    for p in decoder.parameters():
-        p.requires_grad = False
     # Log parameter counts
     log_parameter_counts(encoder, decoder)
 
