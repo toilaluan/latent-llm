@@ -293,7 +293,7 @@ class GPTLatentFlowMatching(nn.Module):
                 raise ValueError(f"Unknown integration method: {method}")
 
             print(
-                f"step {i}: {current_latent.mean().item():.4f}, {current_latent.std().item():.4f}"
+                f"step {step}: {current_latent.mean().item():.4f}, {current_latent.std().item():.4f}"
             )
 
         return current_latent
