@@ -60,7 +60,7 @@ class TextCompletionDataset(Dataset):
 
     def __getitem__(self, idx):
         # Get text from dataset
-        text = self.dataset[idx]["text"]
+        text = self._get_long_text()
 
         # Calculate approximate character length for splitting
         approx_char_count = len(text)
