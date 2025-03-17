@@ -127,6 +127,9 @@ class LatentEncoder(nn.Module):
         masks = torch.cat(
             [masks, torch.ones(B, self.latent_size, device=masks.device)], dim=1
         )
+        print(input_ids)
+        print(masks)
+        print(pad_token_id)
         last_hidden_states = self.model(
             inputs_embeds=inputs_embeds,
             output_hidden_states=True,
