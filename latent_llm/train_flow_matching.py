@@ -673,6 +673,8 @@ def main():
         max_prefix_ratio=args.max_prefix_ratio,
     )
 
+    print(dataset[0])
+
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
