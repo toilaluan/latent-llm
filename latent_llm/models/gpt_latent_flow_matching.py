@@ -4,8 +4,94 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import os
+import math
+import numpy as np
 from huggingface_hub import snapshot_download
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
+
+
+class SinusoidalPositionalEmbedding(nn.Module):
+    """Sinusoidal Positional Embedding used in diffusion models like SDXL and Flux.
+
+    This embedding creates a unique representation for each timestep using
+    sine and cosine functions at different frequencies, similar to the approach
+    in "Attention is All You Need" but adapted for diffusion models.
+    """
+
+    def __init__(self, embedding_dim, max_positions=10000, scale=1.0):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.max_positions = max_positions
+        self.scale = scale
+
+    def forward(self, timesteps):
+        """
+        Args:
+            timesteps: Tensor of shape [B] containing timestep values
+
+        Returns:
+            Tensor of shape [B, embedding_dim] containing timestep embeddings
+        """
+        # Make sure the timesteps have the right shape
+        if len(timesteps.shape) == 0:
+            timesteps = timesteps.unsqueeze(0)
+
+        # Cast to appropriate data type
+        timesteps = timesteps.float()
+
+        # Create position embeddings similar to transformer position embeddings
+        half_dim = self.embedding_dim // 2
+
+        # Create a range of frequencies
+        # Each dimension corresponds to a different frequency for the sinusoidal embedding
+        freqs = torch.exp(
+            -math.log(self.max_positions)
+            * torch.arange(start=0, end=half_dim, device=timesteps.device)
+            / half_dim
+        )
+
+        # Create sinusoidal pattern
+        args = timesteps[:, None] * freqs[None, :]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+
+        # Handle odd embedding dimensions by padding with zeros
+        if self.embedding_dim % 2 == 1:
+            embedding = torch.cat(
+                [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
+            )
+
+        # Scale embedding if needed (sometimes done in diffusion models)
+        return embedding * self.scale
+
+
+class TimestepEmbedding(nn.Module):
+    """SDXL-style timestep embedding with sinusoidal base and projection layers.
+
+    This mimics how modern diffusion models like SDXL process timesteps:
+    1. Convert timesteps to sinusoidal embeddings
+    2. Process through projection layers for better representation
+    """
+
+    def __init__(self, in_dim, out_dim, embedding_dim=256, scale=1.0):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+        # Use sinusoidal embeddings as base
+        self.sinusoidal = SinusoidalPositionalEmbedding(
+            embedding_dim=embedding_dim, scale=scale
+        )
+
+        # Projection layers with GELU activation commonly used in diffusion models
+        self.proj = nn.Sequential(
+            nn.Linear(embedding_dim, out_dim), nn.GELU(), nn.Linear(out_dim, out_dim)
+        )
+
+    def forward(self, timesteps):
+        # Get sinusoidal embeddings
+        emb = self.sinusoidal(timesteps)
+        # Project to desired dimension
+        return self.proj(emb)
 
 
 class GPTLatentFlowMatching(nn.Module):
@@ -34,37 +120,55 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.base_config = self.model.config
 
-        # Replace timestep_embeddings with MLP
-        self.timestep_mlp = (
-            nn.Sequential(
-                nn.Linear(1, 64),  # Input is normalized timestep
-                nn.GELU(),
-                nn.Linear(64, 256),
-                nn.GELU(),
-                nn.Linear(256, timestep_token_size * self.base_config.hidden_size),
+        # Use SDXL-style timestep embeddings with multi-stage processing
+        timestep_dim = self.base_config.hidden_size
+
+        # Create timestep embedding module based on SDXL/Flux approaches
+        self.timestep_embedding = (
+            TimestepEmbedding(
+                in_dim=1, out_dim=timestep_dim, embedding_dim=256, scale=1.0
             )
-            .to(dtype=self.torch_dtype)
             .to(self.device)
+            .to(dtype=self.torch_dtype)
         )
 
-        # Initialize MLP weights
-        for layer in self.timestep_mlp:
-            if isinstance(layer, nn.Linear):
-                torch.nn.init.kaiming_normal_(layer.weight)
+        # Additional projection to final token size
+        self.timestep_proj = (
+            nn.Linear(timestep_dim, timestep_token_size * self.base_config.hidden_size)
+            .to(self.device)
+            .to(dtype=self.torch_dtype)
+        )
+
+        # Initialize weights with commonly used initialization in diffusion models
+        for module in [self.timestep_embedding.proj, self.timestep_proj]:
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
 
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
-        Get timestep embeddings using MLP.
+        Get timestep embeddings using SDXL-style sinusoidal positional encoding.
+
+        Args:
+            timesteps: List of timesteps, one per batch item
+
+        Returns:
+            Tensor of shape [B, timestep_token_size, D] containing timestep embeddings
         """
-        # Convert timesteps to normalized float tensor
+        # Convert timesteps to tensor and normalize to [0, 1] range
         timesteps_tensor = (
             torch.tensor(timesteps, device=self.device).float() / self.max_steps
         )
 
-        # Get embeddings through MLP [B, timestep_token_size * D]
-        t_embs = self.timestep_mlp(timesteps_tensor.unsqueeze(-1))  # Add channel dim
+        # Get embeddings through the timestep embedding module
+        t_embs = self.timestep_embedding(timesteps_tensor)
+
+        # Project to final size and reshape
+        t_embs = self.timestep_proj(t_embs)
 
         # Reshape to [B, timestep_token_size, D]
         return t_embs.view(-1, self.timestep_token_size, self.base_config.hidden_size)
