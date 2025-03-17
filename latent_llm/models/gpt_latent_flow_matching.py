@@ -18,11 +18,6 @@ class GPTLatentFlowMatching(nn.Module):
         timestep_token_size: int = 4,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
-        use_lora: bool = False,
-        lora_r: int = 16,
-        lora_alpha: int = 32,
-        lora_dropout: float = 0.05,
-        lora_target_modules: list[str] = None,
     ):
         super().__init__()
         self.model_name = model_name
@@ -37,19 +32,6 @@ class GPTLatentFlowMatching(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name, torch_dtype=torch_dtype
         )
-
-        # Apply LoRA if requested
-        if use_lora:
-            lora_config = LoraConfig(
-                task_type=TaskType.CAUSAL_LM,
-                r=lora_r,
-                lora_alpha=lora_alpha,
-                lora_dropout=lora_dropout,
-                target_modules=lora_target_modules,
-                bias="none",
-            )
-            self.model = get_peft_model(self.model, lora_config)
-            self.model.print_trainable_parameters()
 
         self.base_config = self.model.config
 

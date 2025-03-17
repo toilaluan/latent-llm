@@ -660,11 +660,6 @@ def main():
         max_steps=args.max_steps,
         device=device,
         torch_dtype=torch_dtype,
-        use_lora=args.use_lora,
-        lora_r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        lora_target_modules=args.lora_target_modules.split(","),
     )
     flow_model.to(device)
 
