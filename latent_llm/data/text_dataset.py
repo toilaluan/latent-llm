@@ -74,10 +74,8 @@ class TextDataset(Dataset):
         ).input_ids
 
         r = random.random()
-        if r < 0.4 and self.random_masking:
-            beta_a, beta_b = 2.0, 1.0  # Controls shape (favors longer sequences)
-            ratio = np.random.beta(beta_a, beta_b)
-            n_tokens = max(1, int(ratio * self.block_size))
+        if r < 0.7 and self.random_masking:
+            n_tokens = random.randint(1, self.block_size)
             input_ids[:, n_tokens:] = self.tokenizer.pad_token_id
         return input_ids.squeeze(0)
 
