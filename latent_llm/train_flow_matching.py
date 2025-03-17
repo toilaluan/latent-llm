@@ -2,6 +2,7 @@ import argparse
 import torch
 import os
 from transformers import AutoTokenizer
+from latent_llm.get_tokenizer import get_tokenizer
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 import wandb
