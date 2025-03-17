@@ -645,14 +645,15 @@ def main():
     flow_model.to(device)
 
     # Get tokenizer from encoder
-    tokenizer = get_tokenizer(args.model_name)
+    model_tokenizer = get_tokenizer(args.model_name)
+    vae_tokenizer = encoder.tokenizer
 
     # Create dataset and dataloader
     print("Creating dataset...")
     dataset = TextCompletionDataset(
         dataset_id=args.dataset,
         split="train",
-        tokenizer=tokenizer,
+        tokenizer=model_tokenizer,
         block_size=encoder_config["block_size"],
         min_prefix_length=args.min_prefix_length,
         max_prefix_ratio=args.max_prefix_ratio,
@@ -687,7 +688,7 @@ def main():
             decoder,
             dataloader,
             optimizer,
-            tokenizer,
+            vae_tokenizer,
             device,
             epoch,
             args,
