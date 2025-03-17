@@ -27,7 +27,6 @@ class GPTLatentFlowMatching(nn.Module):
         self.timestep_token_size = timestep_token_size
         self.torch_dtype = torch_dtype
         self.device = device
-        self.use_lora = use_lora
         self.tokenizer = get_tokenizer(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
             model_name, torch_dtype=torch_dtype
