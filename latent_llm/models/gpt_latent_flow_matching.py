@@ -1,5 +1,5 @@
 from latent_llm.get_tokenizer import get_tokenizer
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoModelForMaskedLM
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -62,7 +62,7 @@ class GPTLatentFlowMatching(nn.Module):
         self.torch_dtype = torch_dtype
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
+        self.model = AutoModelForMaskedLM.from_pretrained(
             model_name, torch_dtype=torch_dtype
         )
 
@@ -237,8 +237,7 @@ class GPTLatentFlowMatching(nn.Module):
             timesteps=timesteps,
         )
 
-        # Flow matching loss is MSE between predicted and target vector fields
-        return F.mse_loss(predicted_vector_field, target_vector_field)
+        return torch.mean((predicted_vector_field - target_vector_field) ** 2)
 
     def sample(
         self,
