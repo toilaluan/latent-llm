@@ -5,6 +5,8 @@ Text VAE is autoregressive model that encodes text into a latent space, trained 
 Flow Matching Model is a Denoising Model that learns to generate completion latent from text and noise.
 
 This novel approach let FM Model to thinks in latent space, it's non auto-regressive
+
+
 ### Installation
 
 ```

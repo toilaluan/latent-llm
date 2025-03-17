@@ -95,6 +95,13 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
+        # Add learnable x1 parameter
+        self.x1 = nn.Parameter(
+            torch.randn(self.latent_size, self.base_config.hidden_size),
+            requires_grad=True,
+        )
+        nn.init.kaiming_normal_(self.x1, a=0, mode="fan_in")
+
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
         Get timestep embeddings using SDXL-style sinusoidal positional encoding.
@@ -180,19 +187,26 @@ class GPTLatentFlowMatching(nn.Module):
             Tuple of (noised_latents, vector_field_target)
         """
         assert all(t <= self.max_steps for t in timesteps), "Timestep out of range"
+        B = latents.size(0)
         sigmas = torch.tensor(
             [[t / self.max_steps] for t in timesteps], device=self.device
         )  # Shape [B, 1]
         sigmas = sigmas.to(self.torch_dtype)
         # Reshape sigmas to [B, 1, 1] for proper broadcasting with [B, T, D]
         sigmas = sigmas.unsqueeze(-1)
-        # Sample noise
-        noise = torch.randn_like(latents, device=self.device, dtype=self.torch_dtype)
-        # Interpolate between source and target
-        noised_latents = (1.0 - sigmas) * latents + sigmas * noise
-        # Target vector field for flow matching
-        # This represents the direction toward the target distribution
-        vector_field = noise - latents
+
+        # Use learned x1 as target instead of random noise
+        target = (
+            self.x1.unsqueeze(0)
+            .expand(B, -1, -1)
+            .to(device=self.device, dtype=self.torch_dtype)
+        )
+
+        # Interpolate between source and learned target
+        noised_latents = (1.0 - sigmas) * latents + sigmas * target
+
+        # Target vector field now points toward learned x1
+        vector_field = target - latents
 
         return noised_latents, vector_field
 
@@ -229,7 +243,7 @@ class GPTLatentFlowMatching(nn.Module):
     def sample(
         self,
         input_ids: torch.Tensor,
-        initial_noise: torch.Tensor,
+        initial_noise: torch.Tensor = None,
         num_steps: int = 100,
         method: str = "euler",
         schedule: str = "linear",
@@ -247,6 +261,12 @@ class GPTLatentFlowMatching(nn.Module):
         Returns:
             Sampled latent vectors
         """
+        # Use learned x1 if no initial noise provided
+        if initial_noise is None:
+            B = input_ids.shape[0]
+            # Expand learned x1 parameter to batch size
+            initial_noise = self.x1.unsqueeze(0).expand(B, -1, -1)
+
         initial_noise = initial_noise.to(self.device, dtype=self.torch_dtype)
         input_ids = input_ids.to(self.device)
         attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
