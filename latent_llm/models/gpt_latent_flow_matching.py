@@ -229,7 +229,7 @@ class GPTLatentFlowMatching(nn.Module):
         # Set up timesteps based on schedule
         if schedule == "linear":
             timesteps = torch.linspace(
-                self.max_steps, 0, num_steps, device=self.device
+                self.max_steps, 1, num_steps, device=self.device
             ).int()
         elif schedule == "quadratic":
             timesteps = torch.linspace(0, 1, num_steps, device=self.device)
@@ -245,7 +245,6 @@ class GPTLatentFlowMatching(nn.Module):
             )
         step_sizes.append(timesteps[-1].float() / self.max_steps)  # Last step
         print("Timesteps: ", timesteps)
-        print("Step sizes: ", step_sizes)
         # Integration loop
         for i, step in enumerate(timesteps):
             # Current timestep for all items in batch
