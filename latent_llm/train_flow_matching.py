@@ -50,7 +50,7 @@ class TextCompletionDataset(Dataset):
         return len(self.dataset)
 
     def _get_long_text(self):
-        text = ".".join(
+        text = ". ".join(
             [
                 self.dataset[random.randint(0, len(self.dataset) - 1)]["text"]
                 for _ in range(10)
@@ -62,28 +62,8 @@ class TextCompletionDataset(Dataset):
         # Get text from dataset
         text = self._get_long_text()
 
-        # Calculate approximate character length for splitting
-        approx_char_count = len(text)
-
-        # Determine split point based on character count
-        max_char_prefix = int(approx_char_count * self.max_prefix_ratio)
-
-        # Split text into prefix and suffix at character level
-        if max_char_prefix < approx_char_count:
-            # Random split point between min_prefix_length chars and max_ratio
-            # Using character approximation for min_prefix_length (assuming ~4 chars per token)
-            min_char_prefix = min(self.min_prefix_length * 4, max_char_prefix)
-            if max_char_prefix > min_char_prefix:
-                split_point = random.randint(min_char_prefix, max_char_prefix)
-            else:
-                split_point = min_char_prefix
-
-            prefix_text = text[:split_point]
-            suffix_text = text[split_point:]
-        else:
-            # If text is too short, use most of it as prefix
-            prefix_text = text[:max_char_prefix]
-            suffix_text = text[max_char_prefix:]
+        prefix_text = text[: self.block_size * 2]
+        suffix_text = text[self.block_size :]
 
         # Now tokenize the prefix and suffix separately
         prefix_tokens = self.tokenizer(
