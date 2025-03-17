@@ -52,44 +52,37 @@ class GPTLatentFlowMatching(nn.Module):
             self.model.print_trainable_parameters()
 
         self.base_config = self.model.config
-        self.timestep_embeddings = nn.Embedding(
-            num_embeddings=(max_steps + 1) * timestep_token_size,
-            embedding_dim=self.base_config.hidden_size,
-            dtype=torch_dtype,
+
+        # Replace timestep_embeddings with MLP
+        self.timestep_mlp = nn.Sequential(
+            nn.Linear(1, 64),  # Input is normalized timestep
+            nn.GELU(),
+            nn.Linear(64, 256),
+            nn.GELU(),
+            nn.Linear(256, timestep_token_size * self.base_config.hidden_size),
         )
-        print(f"Timestep embeddings shape: {self.timestep_embeddings.weight.shape}")
-        torch.nn.init.kaiming_normal_(self.timestep_embeddings.weight)
+
+        # Initialize MLP weights
+        for layer in self.timestep_mlp:
+            if isinstance(layer, nn.Linear):
+                torch.nn.init.kaiming_normal_(layer.weight)
+
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
-        Get embeddings for each timestep in the batch.
-
-        Args:
-            timesteps: List of timestep integers
-
-        Returns:
-            Tensor of timestep embeddings [B, timestep_token_size, D]
+        Get timestep embeddings using MLP.
         """
-        timestep_embeddings_list = []
-        for timestep in timesteps:
-            # Calculate token indices for this timestep
-            indices = list(
-                range(
-                    (timestep - 1) * self.timestep_token_size,
-                    timestep * self.timestep_token_size,
-                )
-            )
-            # Get embeddings for these indices
-            timestep_emb = self.timestep_embeddings(
-                torch.tensor(indices, device=self.device).long().unsqueeze(0)
-            )  # Shape: [1, timestep_token_size, D]
-            timestep_embeddings_list.append(timestep_emb)
+        # Convert timesteps to normalized float tensor
+        timesteps_tensor = (
+            torch.tensor(timesteps, device=self.device).float() / self.max_steps
+        )
 
-        # Concatenate along batch dimension
-        return torch.cat(
-            timestep_embeddings_list, dim=0
-        )  # Shape: [B, timestep_token_size, D]
+        # Get embeddings through MLP [B, timestep_token_size * D]
+        t_embs = self.timestep_mlp(timesteps_tensor.unsqueeze(-1))  # Add channel dim
+
+        # Reshape to [B, timestep_token_size, D]
+        return t_embs.view(-1, self.timestep_token_size, self.base_config.hidden_size)
 
     def forward(
         self,
