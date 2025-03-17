@@ -1,5 +1,10 @@
 from latent_llm.get_tokenizer import get_tokenizer
-from transformers import AutoModelForCausalLM, AutoModelForMaskedLM, AutoConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoModelForMaskedLM,
+    AutoConfig,
+    AutoModel,
+)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -65,9 +70,7 @@ class GPTLatentFlowMatching(nn.Module):
         self.tokenizer = get_tokenizer(model_name)
         self.base_config = AutoConfig.from_pretrained(model_name)
         self.base_config.hidden_size = hidden_size
-        self.model = AutoModelForMaskedLM.from_config(self.base_config).to(
-            dtype=torch_dtype
-        )
+        self.model = AutoModel.from_config(self.base_config).to(dtype=torch_dtype)
 
         self.base_config = self.model.config
 
@@ -174,8 +177,8 @@ class GPTLatentFlowMatching(nn.Module):
             attention_mask=attention_mask,
             output_hidden_states=True,
         )
-        print(output.hidden_states[-1].shape)
-        return output.hidden_states[-1][:, -T:, :]
+        print(output.last_hidden_state.shape)
+        return output.last_hidden_state[:, -T:, :]
 
     def get_noised_latent(
         self, latents: torch.Tensor, timesteps: list[int]
