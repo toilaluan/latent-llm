@@ -645,7 +645,7 @@ def main():
     flow_model.to(device)
 
     # Get tokenizer from encoder
-    tokenizer = encoder.tokenizer
+    tokenizer = get_tokenizer(args.model_name)
 
     # Create dataset and dataloader
     print("Creating dataset...")
