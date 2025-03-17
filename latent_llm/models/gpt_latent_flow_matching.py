@@ -1,5 +1,5 @@
 from latent_llm.get_tokenizer import get_tokenizer
-from transformers import AutoModelForCausalLM, AutoModelForMaskedLM
+from transformers import AutoModelForCausalLM, AutoModelForMaskedLM, AutoConfig
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -52,6 +52,7 @@ class GPTLatentFlowMatching(nn.Module):
         timestep_token_size: int = 4,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
+        hidden_size: int = 896,
     ):
         super().__init__()
         self.model_name = model_name
@@ -62,8 +63,10 @@ class GPTLatentFlowMatching(nn.Module):
         self.torch_dtype = torch_dtype
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
-        self.model = AutoModelForMaskedLM.from_pretrained(
-            model_name, torch_dtype=torch_dtype
+        self.base_config = AutoConfig.from_pretrained(model_name)
+        self.base_config.hidden_size = hidden_size
+        self.model = AutoModelForMaskedLM.from_config(self.base_config).to(
+            dtype=torch_dtype
         )
 
         self.base_config = self.model.config
