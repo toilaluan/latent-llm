@@ -10,88 +10,36 @@ from huggingface_hub import snapshot_download
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 
 
-class SinusoidalPositionalEmbedding(nn.Module):
-    """Sinusoidal Positional Embedding used in diffusion models like SDXL and Flux.
-
-    This embedding creates a unique representation for each timestep using
-    sine and cosine functions at different frequencies, similar to the approach
-    in "Attention is All You Need" but adapted for diffusion models.
-    """
-
-    def __init__(self, embedding_dim, max_positions=10000, scale=1.0):
+class TimestepEmbedder(nn.Module):
+    def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.max_positions = max_positions
-        self.scale = scale
-
-    def forward(self, timesteps):
-        """
-        Args:
-            timesteps: Tensor of shape [B] containing timestep values
-
-        Returns:
-            Tensor of shape [B, embedding_dim] containing timestep embeddings
-        """
-        # Make sure the timesteps have the right shape
-        if len(timesteps.shape) == 0:
-            timesteps = timesteps.unsqueeze(0)
-
-        # Cast to appropriate data type
-        timesteps = timesteps.float()
-
-        # Create position embeddings similar to transformer position embeddings
-        half_dim = self.embedding_dim // 2
-
-        # Create a range of frequencies
-        # Each dimension corresponds to a different frequency for the sinusoidal embedding
-        freqs = torch.exp(
-            -math.log(self.max_positions)
-            * torch.arange(start=0, end=half_dim, device=timesteps.device)
-            / half_dim
+        self.mlp = nn.Sequential(
+            nn.Linear(frequency_embedding_size, hidden_size),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size),
         )
+        self.frequency_embedding_size = frequency_embedding_size
 
-        # Create sinusoidal pattern
-        args = timesteps[:, None] * freqs[None, :]
+    @staticmethod
+    def timestep_embedding(t, dim, max_period=10000):
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0, end=half) / half
+        ).to(t.device)
+        args = t[:, None] * freqs[None]
         embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-
-        # Handle odd embedding dimensions by padding with zeros
-        if self.embedding_dim % 2 == 1:
+        if dim % 2:
             embedding = torch.cat(
                 [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
             )
+        return embedding
 
-        # Scale embedding if needed (sometimes done in diffusion models)
-        return embedding * self.scale
-
-
-class TimestepEmbedding(nn.Module):
-    """SDXL-style timestep embedding with sinusoidal base and projection layers.
-
-    This mimics how modern diffusion models like SDXL process timesteps:
-    1. Convert timesteps to sinusoidal embeddings
-    2. Process through projection layers for better representation
-    """
-
-    def __init__(self, in_dim, out_dim, embedding_dim=256, scale=1.0):
-        super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-
-        # Use sinusoidal embeddings as base
-        self.sinusoidal = SinusoidalPositionalEmbedding(
-            embedding_dim=embedding_dim, scale=scale
+    def forward(self, t):
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(
+            dtype=next(self.parameters()).dtype
         )
-
-        # Projection layers with GELU activation commonly used in diffusion models
-        self.proj = nn.Sequential(
-            nn.Linear(embedding_dim, out_dim), nn.GELU(), nn.Linear(out_dim, out_dim)
-        )
-
-    def forward(self, timesteps):
-        # Get sinusoidal embeddings
-        emb = self.sinusoidal(timesteps)
-        # Project to desired dimension
-        return self.proj(emb)
+        t_emb = self.mlp(t_freq)
+        return t_emb
 
 
 class GPTLatentFlowMatching(nn.Module):
@@ -125,9 +73,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Create timestep embedding module based on SDXL/Flux approaches
         self.timestep_embedding = (
-            TimestepEmbedding(
-                in_dim=1, out_dim=timestep_dim, embedding_dim=256, scale=1.0
-            )
+            TimestepEmbedder(hidden_size=timestep_dim, frequency_embedding_size=256)
             .to(self.device)
             .to(dtype=self.torch_dtype)
         )
@@ -140,7 +86,7 @@ class GPTLatentFlowMatching(nn.Module):
         )
 
         # Initialize weights with commonly used initialization in diffusion models
-        for module in [self.timestep_embedding.proj, self.timestep_proj]:
+        for module in [self.timestep_embedding, self.timestep_proj]:
             for m in module.modules():
                 if isinstance(m, nn.Linear):
                     nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
@@ -161,8 +107,7 @@ class GPTLatentFlowMatching(nn.Module):
         """
         # Convert timesteps to tensor and normalize to [0, 1] range
         timesteps_tensor = (
-            torch.tensor(timesteps, device=self.device)
-            / self.max_steps  # Division in float32 preserves precision
+            torch.tensor(timesteps, device=self.device) / self.max_steps
         ).to(dtype=self.torch_dtype)
 
         # Get embeddings through the timestep embedding module
