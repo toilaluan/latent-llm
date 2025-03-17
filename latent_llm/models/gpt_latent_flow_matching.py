@@ -161,7 +161,8 @@ class GPTLatentFlowMatching(nn.Module):
         """
         # Convert timesteps to tensor and normalize to [0, 1] range
         timesteps_tensor = (
-            torch.tensor(timesteps, device=self.device).float() / self.max_steps
+            torch.tensor(timesteps, device=self.device, dtype=self.torch_dtype)
+            / self.max_steps
         )
 
         # Get embeddings through the timestep embedding module
