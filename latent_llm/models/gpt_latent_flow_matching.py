@@ -174,6 +174,7 @@ class GPTLatentFlowMatching(nn.Module):
             attention_mask=attention_mask,
             output_hidden_states=True,
         )
+        print(output.hidden_states[-1].shape)
         return output.hidden_states[-1][:, -T:, :]
 
     def get_noised_latent(
