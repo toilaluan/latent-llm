@@ -49,6 +49,15 @@ class TextCompletionDataset(Dataset):
     def __len__(self):
         return len(self.dataset)
 
+    def _get_long_text(self):
+        text = ".".join(
+            [
+                self.dataset[random.randint(0, len(self.dataset) - 1)]["text"]
+                for _ in range(10)
+            ]
+        )
+        return text
+
     def __getitem__(self, idx):
         # Get text from dataset
         text = self.dataset[idx]["text"]
