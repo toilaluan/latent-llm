@@ -14,7 +14,7 @@ from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
 VAE_SHIFT = 0
-VAE_SCALE = 1 / 2.1
+VAE_SCALE = 0.79
 
 
 class TextCompletionDataset(Dataset):
