@@ -229,11 +229,11 @@ class GPTLatentFlowMatching(nn.Module):
         # Set up timesteps based on schedule
         if schedule == "linear":
             timesteps = torch.linspace(
-                num_steps, 1, num_steps, device=self.device
+                self.max_steps, 0, num_steps, device=self.device
             ).int()
         elif schedule == "quadratic":
             timesteps = torch.linspace(0, 1, num_steps, device=self.device)
-            timesteps = ((1 - timesteps) ** 2 * num_steps).int().clip(min=1)
+            timesteps = (timesteps**2 * self.max_steps).int()
         else:
             raise ValueError(f"Unknown schedule: {schedule}")
 
@@ -244,7 +244,8 @@ class GPTLatentFlowMatching(nn.Module):
                 (timesteps[i] - timesteps[i + 1]).float() / self.max_steps
             )
         step_sizes.append(timesteps[-1].float() / self.max_steps)  # Last step
-
+        print("Timesteps: ", timesteps)
+        print("Step sizes: ", step_sizes)
         # Integration loop
         for i, step in enumerate(timesteps):
             # Current timestep for all items in batch
@@ -291,6 +292,10 @@ class GPTLatentFlowMatching(nn.Module):
                     current_latent = current_latent - step_sizes[i] * vector_field
             else:
                 raise ValueError(f"Unknown integration method: {method}")
+
+            print("Step: ", step)
+            print("Latent mean: ", current_latent.mean())
+            print("Latent std: ", current_latent.std())
 
         return current_latent
 
