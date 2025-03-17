@@ -35,12 +35,16 @@ class GPTLatentFlowMatching(nn.Module):
         self.base_config = self.model.config
 
         # Replace timestep_embeddings with MLP
-        self.timestep_mlp = nn.Sequential(
-            nn.Linear(1, 64),  # Input is normalized timestep
-            nn.GELU(),
-            nn.Linear(64, 256),
-            nn.GELU(),
-            nn.Linear(256, timestep_token_size * self.base_config.hidden_size),
+        self.timestep_mlp = (
+            nn.Sequential(
+                nn.Linear(1, 64),  # Input is normalized timestep
+                nn.GELU(),
+                nn.Linear(64, 256),
+                nn.GELU(),
+                nn.Linear(256, timestep_token_size * self.base_config.hidden_size),
+            )
+            .to(dtype=self.torch_dtype)
+            .to(self.device)
         )
 
         # Initialize MLP weights
