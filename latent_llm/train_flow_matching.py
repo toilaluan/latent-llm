@@ -62,6 +62,8 @@ class TextCompletionDataset(Dataset):
         # Get text from dataset
         text = self._get_long_text()
 
+        print(text)
+
         prefix_text = text[: self.block_size * 2]
         suffix_text = text[self.block_size :]
 
