@@ -20,8 +20,6 @@ uv pip install flash-attn --no-build-isolation
 ### Training Text VAE
 
 ```
-python latent_llm/train_text_vae.py
-```
 python train.py --model_name Qwen/Qwen2.5-Coder-0.5B-Instruct \
 --block-size 32 \
 --latent-size 64 \
