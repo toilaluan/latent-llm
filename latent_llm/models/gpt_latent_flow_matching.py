@@ -248,47 +248,28 @@ class GPTLatentFlowMatching(nn.Module):
     def sample(
         self,
         input_ids: torch.Tensor,
-        initial_noise: torch.Tensor = None,
         num_steps: int = 100,
-        method: str = "euler",
-        schedule: str = "linear",
     ) -> torch.Tensor:
         """
         Sample from the model using numerical integration.
 
         Args:
             input_ids: Input token IDs [B, S]
-            initial_noise: Initial noise to start sampling from [B, T, D]
             num_steps: Number of steps for the integration
-            method: Integration method ('euler' or 'heun')
-            schedule: Sampling schedule ('linear' or 'quadratic')
 
         Returns:
             Sampled latent vectors
         """
-        # Use learned x1 if no initial noise provided
-        if initial_noise is None:
-            B = input_ids.shape[0]
-            # Expand learned x1 parameter to batch size
-            initial_noise = self.x1.unsqueeze(0).expand(B, -1, -1)
-
+        B = input_ids.shape[0]
+        initial_noise = self.x1.unsqueeze(0).expand(B, -1, -1)
         initial_noise = initial_noise.to(self.device, dtype=self.torch_dtype)
         input_ids = input_ids.to(self.device)
         attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
-
-        # Start with random noise
         current_latent = initial_noise
 
-        # Set up timesteps based on schedule
-        if schedule == "linear":
-            timesteps = torch.linspace(
-                self.max_steps, 1, num_steps, device=self.device
-            ).int()
-        elif schedule == "quadratic":
-            timesteps = torch.linspace(0, 1, num_steps, device=self.device)
-            timesteps = (timesteps**2 * self.max_steps).int()
-        else:
-            raise ValueError(f"Unknown schedule: {schedule}")
+        timesteps = torch.linspace(
+            self.max_steps, 1, num_steps, device=self.device
+        ).int()
 
         # Calculate step sizes (may vary with non-linear schedules)
         step_sizes = []
@@ -311,39 +292,7 @@ class GPTLatentFlowMatching(nn.Module):
                     latents=current_latent,
                     timesteps=batch_timesteps,
                 )
-
-            # Update using selected integration method
-            if method == "euler":
-                # Basic Euler method
-                current_latent = current_latent - step_sizes[i] * vector_field
-            elif method == "heun":
-                # Heun's method (second-order Runge-Kutta)
-                # Only use for steps except the last one
-                if i < len(timesteps) - 1:
-                    # Predicted next point using Euler
-                    next_point = current_latent - step_sizes[i] * vector_field
-
-                    # Get next timestep
-                    next_timestep = timesteps[i + 1].item()
-                    next_batch_timesteps = [next_timestep] * input_ids.shape[0]
-
-                    # Get vector field at predicted next point
-                    with torch.no_grad():
-                        next_vector_field = self.forward(
-                            input_ids=input_ids,
-                            attention_mask=attention_mask,
-                            latents=next_point,
-                            timesteps=next_batch_timesteps,
-                        )
-
-                    # Average vector fields and take step
-                    avg_vector_field = 0.5 * (vector_field + next_vector_field)
-                    current_latent = current_latent - step_sizes[i] * avg_vector_field
-                else:
-                    # For the last step, just use Euler
-                    current_latent = current_latent - step_sizes[i] * vector_field
-            else:
-                raise ValueError(f"Unknown integration method: {method}")
+            current_latent = current_latent - step_sizes[i] * vector_field
 
             print(
                 f"step {step}: {current_latent.mean().item():.4f}, {current_latent.std().item():.4f}"
