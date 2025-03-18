@@ -22,7 +22,8 @@ class TextCompletionDataset(Dataset):
         self,
         dataset_id: str,
         split: str,
-        tokenizer,
+        tokenizer_prefix,
+        tokenizer_suffix,
         block_size: int = 1024,
         min_prefix_length: int = 10,
         max_prefix_ratio: float = 0.7,
@@ -33,7 +34,8 @@ class TextCompletionDataset(Dataset):
         Args:
             dataset_id: HuggingFace dataset ID
             split: Dataset split (train, validation, test)
-            tokenizer: Tokenizer for encoding text
+            tokenizer_prefix: Tokenizer for encoding prefix text (VAE)
+            tokenizer_suffix: Tokenizer for encoding suffix text (denoiser)
             block_size: Maximum sequence length
             min_prefix_length: Minimum number of tokens in prefix
             max_prefix_ratio: Maximum ratio of prefix to total text length
@@ -41,7 +43,8 @@ class TextCompletionDataset(Dataset):
         from datasets import load_dataset
 
         self.dataset = load_dataset(dataset_id, split=split)
-        self.tokenizer = tokenizer
+        self.tokenizer_prefix = tokenizer_prefix
+        self.tokenizer_suffix = tokenizer_suffix
         self.block_size = block_size
         self.min_prefix_length = min_prefix_length
         self.max_prefix_ratio = max_prefix_ratio
@@ -62,13 +65,12 @@ class TextCompletionDataset(Dataset):
         # Get text from dataset
         text = self._get_long_text()
 
-        print(text)
-
+        # Split into prefix and suffix
         prefix_text = text[: self.block_size * 2]
         suffix_text = text[self.block_size :]
 
-        # Now tokenize the prefix and suffix separately
-        prefix_tokens = self.tokenizer(
+        # Now tokenize the prefix and suffix with their respective tokenizers
+        prefix_tokens = self.tokenizer_prefix(
             prefix_text,
             truncation=True,
             max_length=self.block_size,
@@ -76,7 +78,7 @@ class TextCompletionDataset(Dataset):
             return_tensors="pt",
         ).input_ids[0]
 
-        suffix_tokens = self.tokenizer(
+        suffix_tokens = self.tokenizer_suffix(
             suffix_text,
             truncation=True,
             max_length=self.block_size,
@@ -268,7 +270,8 @@ def train_one_epoch(
     decoder,
     dataloader,
     optimizer,
-    tokenizer,
+    model_tokenizer,
+    vae_tokenizer,
     device,
     epoch,
     args,
@@ -287,19 +290,19 @@ def train_one_epoch(
         # Move batch to device
         prefix_tokens = batch["prefix"].to(device)
         suffix_tokens = batch["suffix"].to(device)
-        # Encode suffix tokens to latent space (target latents)
+
+        # Encode prefix tokens to latent space (encoder input)
         with torch.no_grad():
             rep_latents, _, clean_latents = encoder(
-                suffix_tokens, tokenizer.pad_token_id
+                prefix_tokens, vae_tokenizer.pad_token_id
             )
-            # Use the reparameterized latents directly from the VAE
-            suffix_latents = clean_latents
-            suffix_latents = (suffix_latents + VAE_SHIFT) * VAE_SCALE
-            vae_mean = suffix_latents.mean().item()
-            vae_std = suffix_latents.std().item()
+            prefix_latents = clean_latents
+            prefix_latents = (prefix_latents + VAE_SHIFT) * VAE_SCALE
+            vae_mean = prefix_latents.mean().item()
+            vae_std = prefix_latents.std().item()
 
         # Sample random timesteps
-        batch_size = prefix_tokens.size(0)
+        batch_size = suffix_tokens.size(0)
         optimizer.zero_grad()  # Zero gradients once before the loop
         accumulated_loss = 0
 
@@ -322,7 +325,7 @@ def train_one_epoch(
             )
 
             # Calculate flow matching loss
-            loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
+            loss = model.get_loss(suffix_tokens, prefix_latents, timesteps)
             # Scale loss by the number of accumulation steps to maintain effective learning rate
             scaled_loss = loss / repeat_per_encode_pass
             scaled_loss.backward()  # Gradients will accumulate across iterations
@@ -357,10 +360,6 @@ def train_one_epoch(
                 }
             )
 
-        # # Save checkpoint
-        # if step % args.checkpoint_interval == 0 and step > 0:
-        #     save_checkpoint(model, optimizer, epoch, step, args)
-
         # Run evaluation
         if batch_idx % args.eval_interval == 0:
             evaluate(
@@ -368,7 +367,8 @@ def train_one_epoch(
                 encoder,
                 decoder,
                 dataloader,
-                tokenizer,
+                model_tokenizer,
+                vae_tokenizer,
                 device,
                 epoch,
                 batch_idx,
@@ -384,7 +384,8 @@ def evaluate(
     encoder,
     decoder,
     dataloader,
-    tokenizer,
+    model_tokenizer,
+    vae_tokenizer,
     device,
     epoch,
     step,
@@ -403,8 +404,8 @@ def evaluate(
     for i in range(min(args.num_samples, len(suffix_tokens))):
         # Filter out padding tokens
         suffix = suffix_tokens[i]
-        suffix = suffix[suffix != tokenizer.pad_token_id]
-        true_suffix = tokenizer.decode(suffix, skip_special_tokens=True)
+        suffix = suffix[suffix != model_tokenizer.pad_token_id]
+        true_suffix = model_tokenizer.decode(suffix, skip_special_tokens=True)
         true_suffixes.append(true_suffix)
 
     # Generate completions
@@ -416,6 +417,12 @@ def evaluate(
         prefix = prefix_tokens[i : i + 1]  # Keep batch dimension
         suffix = suffix_tokens[i : i + 1]  # Keep batch dimension
 
+        # Encode prefix tokens to get latents
+        with torch.no_grad():
+            rep_latents, _, clean_latents = encoder(prefix, vae_tokenizer.pad_token_id)
+            prefix_latents = clean_latents
+            prefix_latents = (prefix_latents + VAE_SHIFT) * VAE_SCALE
+
         # Generate initial noise
         B, T, D = 1, model.latent_size, model.base_config.hidden_size
         initial_noise = torch.randn(B, T, D, device=device)
@@ -423,7 +430,7 @@ def evaluate(
         # Sample using flow matching
         with torch.no_grad():
             predicted_latents = model.sample(
-                input_ids=prefix, initial_noise=initial_noise, num_steps=args.max_steps
+                input_ids=suffix, initial_noise=initial_noise, num_steps=args.max_steps
             )
 
             predicted_latents = predicted_latents / VAE_SCALE - VAE_SHIFT
@@ -435,32 +442,30 @@ def evaluate(
                 predicted_latents, max_new_tokens=50, temperature=0.0
             )
 
-            # Also get true suffix latents and decode them to validate decoder
-            true_rep_latents, _, true_clean_latents = encoder(
-                suffix, tokenizer.pad_token_id
-            )
-            # Use clean latents from encoder
+            # Also decode true prefix latents to validate decoder
             true_output_ids = decoder.generate(
-                true_clean_latents, max_new_tokens=50, temperature=0.0
+                prefix_latents / VAE_SCALE - VAE_SHIFT,
+                max_new_tokens=50,
+                temperature=0.0,
             )
 
-        # Decode generated text
-        generated_suffix = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+        # Decode generated text using VAE tokenizer for output
+        generated_suffix = vae_tokenizer.decode(output_ids[0], skip_special_tokens=True)
         generated_suffixes.append(generated_suffix)
 
         # Decode true latent output
-        true_latent_suffix = tokenizer.decode(
+        true_latent_suffix = vae_tokenizer.decode(
             true_output_ids[0], skip_special_tokens=True
         )
         true_latent_suffixes.append(true_latent_suffix)
 
-    # Decode prefixes for context
+    # Decode prefixes for context using VAE tokenizer
     prefixes = []
     for i in range(min(args.num_samples, len(prefix_tokens))):
         # Filter out padding tokens
         prefix = prefix_tokens[i]
-        prefix = prefix[prefix != tokenizer.pad_token_id]
-        prefix_text = tokenizer.decode(prefix, skip_special_tokens=True)
+        prefix = prefix[prefix != vae_tokenizer.pad_token_id]
+        prefix_text = vae_tokenizer.decode(prefix, skip_special_tokens=True)
         prefixes.append(prefix_text)
 
     # Log examples
@@ -624,10 +629,8 @@ def main():
     encoder_config = encoder.latent_config
 
     # Create decoder
-    decoder = LatentDecoder(
-        model_name=decoder_id,
-        latent_size=encoder_config["latent_size"],
-        block_size=encoder_config["block_size"],
+    decoder = LatentDecoder.from_pretrained(
+        repo_id=decoder_id,
         torch_dtype=torch_dtype,
     )
     decoder.to(device)
@@ -646,16 +649,17 @@ def main():
     )
     flow_model.to(device)
 
-    # Get tokenizer from encoder
+    # Get tokenizers for each model
     model_tokenizer = get_tokenizer(args.model_name)
     vae_tokenizer = encoder.tokenizer
 
-    # Create dataset and dataloader
+    # Create dataset and dataloader with both tokenizers
     print("Creating dataset...")
     dataset = TextCompletionDataset(
         dataset_id=args.dataset,
         split="train",
-        tokenizer=model_tokenizer,
+        tokenizer_prefix=vae_tokenizer,
+        tokenizer_suffix=model_tokenizer,
         block_size=encoder_config["block_size"],
         min_prefix_length=args.min_prefix_length,
         max_prefix_ratio=args.max_prefix_ratio,
@@ -690,6 +694,7 @@ def main():
             decoder,
             dataloader,
             optimizer,
+            model_tokenizer,
             vae_tokenizer,
             device,
             epoch,
@@ -697,9 +702,6 @@ def main():
         )
 
         print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
-
-        # Save model after each epoch
-        # save_checkpoint(flow_model, optimizer, epoch, 0, args)
 
     # Save final model
     if args.use_wandb:
