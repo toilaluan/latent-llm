@@ -106,7 +106,34 @@ class GPTLatentFlowMatching(nn.Module):
             torch.randn(self.latent_size, self.base_config.hidden_size),
             requires_grad=True,
         )
-        nn.init.kaiming_normal_(self.x1, a=0, mode="fan_in")
+
+        # Initialize all model weights
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        """Initialize model weights following best practices for flow matching models"""
+        # Initialize x1 learnable parameter
+        nn.init.normal_(self.x1, mean=0.0, std=0.02)
+
+        # Initialize timestep embedding modules with Kaiming initialization
+        for module in [self.timestep_embedding, self.timestep_proj]:
+            for m in module.modules():
+                if isinstance(m, nn.Linear):
+                    nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
+                    if m.bias is not None:
+                        nn.init.zeros_(m.bias)
+
+        # Initialize transformer components if not pretrained
+        # Note: For many pretrained models, this will be overridden by loaded weights
+        for module in self.model.modules():
+            if isinstance(module, nn.Linear):
+                # Use slightly smaller init for stability
+                nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
@@ -232,7 +259,6 @@ class GPTLatentFlowMatching(nn.Module):
         """
         # Create attention mask
         attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
-
         # Get noised latents and target vector field
         noised_latents, target_vector_field = self.get_noised_latent(latents, timesteps)
         # Predict vector field
