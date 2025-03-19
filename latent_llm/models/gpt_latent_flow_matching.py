@@ -312,7 +312,7 @@ class GPTLatentFlowMatching(nn.Module):
             dim=1,
         )
         print(attention_mask.shape)  # B T_latent + T_text
-
+        print(inputs.shape)
         outputs = self.transformer.forward(
             src=inputs,
             mask=attention_mask,
