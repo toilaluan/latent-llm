@@ -67,7 +67,7 @@ class GPTLatentFlowMatching(nn.Module):
         nn.init.normal_(self.x1, mean=0.0, std=0.02)
 
         # Initialize timestep embedding modules with Kaiming initialization
-        for m in self.timestep_embedding.modules():
+        for m in self.timestep_proj.modules():
             if isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
                 if m.bias is not None:
