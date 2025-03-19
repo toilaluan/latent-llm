@@ -275,12 +275,12 @@ class GPTLatentFlowMatching(nn.Module):
         B, T, D = latents.shape
         assert self.latent_shape == (T, D), "Latent shape mismatch"
         latents = latents.to(self.device)
-
-        text_output = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        )
+        with torch.no_grad():
+            text_output = self.model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+            )
         text_cond = text_output.last_hidden_state
         text_cond = torch.mean(text_cond, dim=1)
         text_embs = self.text_proj(text_cond)  # B 1 D
