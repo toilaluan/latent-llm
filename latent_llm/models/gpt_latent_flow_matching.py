@@ -253,7 +253,7 @@ class GPTLatentFlowMatching(nn.Module):
         print(t_embs.shape)
 
         # Reshape to [B, 1, D]
-        return t_embs.unsqueeze(1)
+        return t_embs
 
     def forward(
         self,
