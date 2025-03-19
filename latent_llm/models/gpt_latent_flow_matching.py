@@ -281,7 +281,7 @@ class GPTLatentFlowMatching(nn.Module):
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
         print(latents.shape, t_embs.shape, text_embs.shape)
 
-        latents, text_embs, t_embs = self.transformer(
+        latents, text_embs = self.transformer(
             modality_tokens=(latents, text_embs),
             modality_masks=(None, attention_mask),
             time_cond=t_embs,
