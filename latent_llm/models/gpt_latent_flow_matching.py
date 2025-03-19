@@ -82,9 +82,9 @@ class Block(nn.Module):
         )
 
     def forward(self, x, cond):
-        adaln_output = self.adaptive_ln(cond).chunk(6, dim=-1)
+        adaln_output = self.adaptive_ln(cond)
         print(adaln_output.shape)
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_output
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_output.chunk(6, dim=-1)
         x = x + gate_msa * self.attn(modulate(x, shift_msa, scale_msa))
         x = x + gate_mlp * self.ff(modulate(x, shift_mlp, scale_mlp))
         return x
