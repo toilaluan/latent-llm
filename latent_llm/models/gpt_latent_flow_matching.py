@@ -1,10 +1,9 @@
 from latent_llm.get_tokenizer import get_tokenizer
 from transformers import (
     AutoModelForCausalLM,
-    AutoModelForMaskedLM,
-    AutoConfig,
-    AutoModel,
 )
+from x_transformers import XTransformer, Encoder
+
 from mmdit.mmdit_generalized_pytorch import MMDiT
 import torch
 import torch.nn as nn
@@ -231,16 +230,20 @@ class GPTLatentFlowMatching(nn.Module):
         """Initialize model weights following best practices for flow matching models"""
         # Initialize x1 learnable parameter
         nn.init.normal_(self.x1, mean=0.0, std=0.02)
-        for p in self.model.parameters():
-            p.requires_grad = False
 
-        # for p in self.transformer.parameters():
-        #     nn.init.normal_(p, mean=0.0, std=0.02)
+        for p in self.transformer.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
 
         for p in self.timestep_proj.parameters():
             nn.init.normal_(p, mean=0.0, std=0.02)
 
         for p in self.text_proj.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
+
+        for p in self.latent_proj.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
+
+        for p in self.mmdit.parameters():
             nn.init.normal_(p, mean=0.0, std=0.02)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:

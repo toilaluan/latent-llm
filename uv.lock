@@ -487,6 +487,7 @@ dependencies = [
     { name = "torch" },
     { name = "transformers" },
     { name = "wandb" },
+    { name = "x-transformers" },
 ]
 
 [package.metadata]
@@ -506,6 +507,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.6.0" },
     { name = "transformers", git = "https://github.com/huggingface/transformers?rev=v4.49.0-Gemma-3" },
     { name = "wandb", specifier = ">=0.19.8" },
+    { name = "x-transformers", specifier = ">=2.1.37" },
 ]
 
 [[package]]

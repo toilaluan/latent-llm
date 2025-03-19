@@ -20,6 +20,7 @@ dependencies = [
     "torch>=2.6.0",
     "transformers>=4.49.0",
     "wandb>=0.19.8",
+    "x-transformers>=2.1.37",
 ]
 
 [tool.uv.sources]
