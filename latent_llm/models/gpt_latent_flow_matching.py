@@ -279,6 +279,7 @@ class GPTLatentFlowMatching(nn.Module):
             attention_mask.shape[1] == input_ids.shape[1]
         ), "Attention mask shape mismatch"
         assert latents.shape[0] == input_ids.shape[0], "Batch size mismatch"
+        print(latents.shape)
         B, T, D = latents.shape
         assert self.latent_shape == (T, D), "Latent shape mismatch"
         latents = latents.to(self.device)
