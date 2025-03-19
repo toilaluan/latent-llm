@@ -216,18 +216,17 @@ class GPTLatentFlowMatching(nn.Module):
         """Initialize model weights following best practices for flow matching models"""
         # Initialize x1 learnable parameter
         nn.init.normal_(self.x1, mean=0.0, std=0.02)
+        for p in self.model.parameters():
+            p.requires_grad = False
 
-        # Initialize transformer components if not pretrained
-        # Note: For many pretrained models, this will be overridden by loaded weights
-        for module in self.model.modules():
-            if isinstance(module, nn.Linear):
-                # Use slightly smaller init for stability
-                nn.init.normal_(module.weight, mean=0.0, std=0.02)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-            elif isinstance(module, nn.LayerNorm):
-                nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
+        for p in self.transformer.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
+
+        for p in self.timestep_proj.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
+
+        for p in self.text_proj.parameters():
+            nn.init.normal_(p, mean=0.0, std=0.02)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
