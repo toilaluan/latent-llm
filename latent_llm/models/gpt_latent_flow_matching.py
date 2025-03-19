@@ -287,6 +287,7 @@ class GPTLatentFlowMatching(nn.Module):
         text_embs = self.text_proj(text_cond)  # B 1 D
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
         context = text_embs + t_embs
+        context = context.squeeze(1)
         x = self.transformer(latents, context)
         return x
 
