@@ -304,7 +304,7 @@ class GPTLatentFlowMatching(nn.Module):
         text_embs = self.text_proj(text_embs)  # B T_text D
         print(latents.shape, text_embs.shape)
         inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
-        print(attention_mask)
+        print(attention_mask.shape)
         attention_mask = torch.cat(
             (
                 torch.ones(B, self.latent_size, device=self.device),
@@ -312,7 +312,7 @@ class GPTLatentFlowMatching(nn.Module):
             ),
             dim=1,
         )
-        print(attention_mask)
+        print(attention_mask.shape)
         outputs = self.transformer.forward(
             src=inputs,
             src_key_padding_mask=attention_mask,
