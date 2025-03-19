@@ -140,7 +140,7 @@ def parse_args():
         "--batch_size", type=int, default=8, help="Batch size for training"
     )
     parser.add_argument(
-        "--num_epochs", type=int, default=10, help="Number of epochs to train for"
+        "--num_steps", type=int, default=100000, help="Number of steps to train for"
     )
     parser.add_argument(
         "--learning_rate", type=float, default=5e-5, help="Learning rate for training"
@@ -265,7 +265,7 @@ def collate_fn(batch):
     }
 
 
-def train_one_epoch(
+def train_step(
     model,
     encoder,
     decoder,
@@ -274,100 +274,87 @@ def train_one_epoch(
     model_tokenizer,
     vae_tokenizer,
     device,
-    epoch,
+    global_step,
     args,
+    dataloader_iter=None,
 ):
+    """Train for a single step (replacing train_one_epoch)"""
     model.train()
-    total_loss = 0
-    total_steps = len(dataloader) * args.repeat_per_encode_pass
 
-    # Create a single progress bar for all steps (batch × repeats)
-    progress_bar = tqdm(
-        total=total_steps,
-        desc=f"Epoch {epoch}",
-    )
-    timesteps_histogram = []
-    for batch_idx, batch in enumerate(dataloader):
-        # Move batch to device
-        prefix_tokens = batch["prefix"].to(device)
-        suffix_tokens = batch["suffix"].to(device)
+    # Get a batch, reset iterator if needed
+    try:
+        if dataloader_iter is None:
+            dataloader_iter = iter(dataloader)
+        batch = next(dataloader_iter)
+    except StopIteration:
+        dataloader_iter = iter(dataloader)
+        batch = next(dataloader_iter)
 
-        # Encode prefix tokens to latent space (encoder input)
-        with torch.no_grad():
-            rep_latents, _, clean_latents = encoder(
-                suffix_tokens, vae_tokenizer.pad_token_id
-            )
-            suffix_latents = clean_latents
-            suffix_latents = (suffix_latents + VAE_SHIFT) * VAE_SCALE
-            vae_mean = suffix_latents.mean().item()
-            vae_std = suffix_latents.std().item()
+    # Move batch to device
+    prefix_tokens = batch["prefix"].to(device)
+    suffix_tokens = batch["suffix"].to(device)
 
-        # Sample random timesteps
-        batch_size = suffix_tokens.size(0)
-        optimizer.zero_grad()  # Zero gradients once before the loop
-        accumulated_loss = 0
-        timesteps = torch.randint(
-            1, args.max_steps + 1, (batch_size,), device=device
-        ).tolist()
-        timesteps_histogram.extend(timesteps)
+    # Encode prefix tokens to latent space (encoder input)
+    with torch.no_grad():
+        rep_latents, _, clean_latents = encoder(
+            suffix_tokens, vae_tokenizer.pad_token_id
+        )
+        suffix_latents = clean_latents
+        suffix_latents = (suffix_latents + VAE_SHIFT) * VAE_SCALE
+        vae_mean = suffix_latents.mean().item()
+        vae_std = suffix_latents.std().item()
 
-        # Log wandb timesteps
+    # Sample random timesteps
+    batch_size = suffix_tokens.size(0)
+    optimizer.zero_grad()
+
+    timesteps = torch.randint(
+        1, args.max_steps + 1, (batch_size,), device=device
+    ).tolist()
+
+    # Log wandb timesteps
+    if args.use_wandb:
         wandb.log(
             {
-                "train/timesteps": wandb.Histogram(timesteps_histogram),
+                "train/timesteps": wandb.Histogram(timesteps),
+                "train/step": global_step,
             }
         )
 
-        loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
-        loss.backward()  # Gradients will accumulate across iterations
+    loss = model.get_loss(prefix_tokens, suffix_latents, timesteps)
+    loss.backward()
+    optimizer.step()
 
-        accumulated_loss += loss.item()
-
-        # Update progress bar for each repeat step
-        progress_bar.update(1)
-        progress_bar.set_postfix(
+    # Logging
+    if args.use_wandb and global_step % args.log_interval == 0:
+        wandb.log(
             {
-                "loss": loss.item(),
-                "vae_mean": vae_mean,
-                "vae_std": vae_std,
+                "train/loss": loss.item(),
+                "train/step": global_step,
+                "train/vae_mean": vae_mean,
+                "train/vae_std": vae_std,
             }
         )
 
-        # Average loss for the batch
-        avg_batch_loss = accumulated_loss / args.repeat_per_encode_pass
-        optimizer.step()  # Step optimizer once after the loop
+    # Run evaluation
+    if global_step % args.eval_interval == 0:
+        evaluate(
+            model,
+            encoder,
+            decoder,
+            dataloader,
+            model_tokenizer,
+            vae_tokenizer,
+            device,
+            global_step,
+            args,
+        )
 
-        # Logging - use batch_idx instead of step
-        total_loss += avg_batch_loss
+    # Save checkpoint
+    if global_step % args.checkpoint_interval == 0:
+        save_checkpoint(model, optimizer, global_step, args)
 
-        # Log to wandb
-        if args.use_wandb and batch_idx % args.log_interval == 0:
-            global_step = batch_idx + epoch * len(dataloader)
-            wandb.log(
-                {
-                    "train/loss": avg_batch_loss,
-                    "train/epoch": epoch,
-                    "train/step": global_step,
-                }
-            )
-
-        # Run evaluation
-        if batch_idx % args.eval_interval == 0:
-            evaluate(
-                model,
-                encoder,
-                decoder,
-                dataloader,
-                model_tokenizer,
-                vae_tokenizer,
-                device,
-                epoch,
-                batch_idx,
-                args,
-            )
-
-    avg_loss = total_loss / len(dataloader)
-    return avg_loss
+    return loss.item(), dataloader_iter
 
 
 def evaluate(
@@ -378,7 +365,6 @@ def evaluate(
     model_tokenizer,
     vae_tokenizer,
     device,
-    epoch,
     step,
     args,
 ):
@@ -482,7 +468,6 @@ def evaluate(
                         "generated_suffix",
                     ],
                 ),
-                "eval/epoch": epoch,
                 "eval/step": step,
             }
         )
@@ -509,17 +494,16 @@ def evaluate(
         print("---")
 
 
-def save_checkpoint(model, optimizer, epoch, step, args):
+def save_checkpoint(model, optimizer, step, args):
     """Save model checkpoint"""
     checkpoint_dir = f"{args.save_path}/checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    checkpoint_path = f"{checkpoint_dir}/checkpoint_epoch{epoch}_step{step}.pt"
+    checkpoint_path = f"{checkpoint_dir}/checkpoint_step{step}.pt"
     torch.save(
         {
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
-            "epoch": epoch,
             "step": step,
         },
         checkpoint_path,
@@ -591,6 +575,7 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
     torch_dtype = torch.bfloat16 if args.dtype == "bfloat16" else torch.float32
+
     # Initialize wandb
     if args.use_wandb:
         wandb.init(
@@ -672,10 +657,12 @@ def main():
     # Create save directory
     os.makedirs(args.save_path, exist_ok=True)
 
-    # Training loop
-    for epoch in range(args.num_epochs):
-        print(f"Starting epoch {epoch + 1}/{args.num_epochs}")
-        avg_loss = train_one_epoch(
+    # Training loop - step-based instead of epoch-based
+    dataloader_iter = iter(dataloader)
+    progress_bar = tqdm(total=args.num_steps, desc="Training")
+
+    for step in range(args.num_steps):
+        loss, dataloader_iter = train_step(
             flow_model,
             encoder,
             decoder,
@@ -684,11 +671,13 @@ def main():
             model_tokenizer,
             vae_tokenizer,
             device,
-            epoch,
+            step,
             args,
+            dataloader_iter,
         )
 
-        print(f"Epoch {epoch + 1} completed. Average loss: {avg_loss:.4f}")
+        progress_bar.update(1)
+        progress_bar.set_postfix({"loss": loss})
 
     # Save final model
     if args.use_wandb:
