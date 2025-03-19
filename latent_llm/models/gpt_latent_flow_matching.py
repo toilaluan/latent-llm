@@ -213,10 +213,9 @@ class GPTLatentFlowMatching(nn.Module):
         ).to(dtype=torch_dtype)
         self.transformer = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
-                hidden_size=hidden_size,
-                num_heads=num_heads,
-                intermediate_size=intermediate_size,
-                norm_eps=1e-5,
+                d_model=hidden_size,
+                nhead=num_heads,
+                dim_feedforward=intermediate_size,
             ),
             num_layers=num_layers,
         ).to(dtype=torch_dtype)
