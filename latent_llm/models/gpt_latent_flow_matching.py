@@ -206,10 +206,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.transformer = MMDiT(
             depth=num_layers,
-            dim_modalities=(
-                hidden_size,
-                self.model.config.hidden_size,
-            ),
+            dim_modalities=(hidden_size, self.model.config.hidden_size),
             dim_cond=256,
         ).to(dtype=torch_dtype)
         # Initialize all model weights
@@ -284,9 +281,7 @@ class GPTLatentFlowMatching(nn.Module):
                 attention_mask=attention_mask,
                 output_hidden_states=True,
             )
-        text_cond = text_output.last_hidden_state
-        text_cond = torch.mean(text_cond, dim=1)
-        text_embs = self.text_proj(text_cond)  # B 1 D
+        text_embs = text_output.last_hidden_state
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
         print(latents.shape, t_embs.shape, text_embs.shape)
 
