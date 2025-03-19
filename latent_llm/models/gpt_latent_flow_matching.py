@@ -64,6 +64,7 @@ class FeedForward(nn.Module):
 
 
 def modulate(x, shift, scale):
+    print(x.shape, shift.shape, scale.shape)
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
