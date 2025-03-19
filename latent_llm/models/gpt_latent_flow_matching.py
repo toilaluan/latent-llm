@@ -88,8 +88,11 @@ class Block(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             adaln_output.chunk(6, dim=-1)
         )
+        print("Block", x.shape, gate_msa.shape, gate_mlp.shape)
         x = x + gate_msa.unsqueeze(1) * self.attn(modulate(x, shift_msa, scale_msa))
+        print("Block/1", x.shape)
         x = x + gate_mlp.unsqueeze(1) * self.ff(modulate(x, shift_mlp, scale_mlp))
+        print("Block/2", x.shape)
         return x
 
 
