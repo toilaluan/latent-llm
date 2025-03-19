@@ -206,11 +206,26 @@ class GPTLatentFlowMatching(nn.Module):
             requires_grad=True,
         )
 
-        self.transformer = MMDiT(
+        self.mmdit = MMDiT(
             depth=num_layers,
             dim_modalities=(hidden_size, self.model.config.hidden_size),
             dim_cond=256,
         ).to(dtype=torch_dtype)
+        self.transformer = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(
+                hidden_size=hidden_size,
+                num_heads=num_heads,
+                intermediate_size=intermediate_size,
+                norm_eps=1e-5,
+            ),
+            num_layers=num_layers,
+        ).to(dtype=torch_dtype)
+        self.latent_proj = nn.Linear(hidden_size, self.latent_size).to(
+            dtype=torch_dtype
+        )
+        self.text_proj = nn.Linear(self.model.config.hidden_size, hidden_size).to(
+            dtype=torch_dtype
+        )
         # Initialize all model weights
         self.initialize_weights()
 
@@ -282,12 +297,28 @@ class GPTLatentFlowMatching(nn.Module):
         text_embs = text_output.hidden_states[-1]
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
 
-        latents, text_embs = self.transformer(
+        latents, text_embs = self.mmdit(
             modality_tokens=(latents, text_embs),
             modality_masks=(None, attention_mask),
             time_cond=t_embs,
         )
-        return latents
+        latents = self.latent_proj(latents)  # B T_latent D
+        text_embs = self.text_proj(text_embs)  # B T_text D
+        inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
+        attention_mask = torch.cat(
+            (
+                torch.ones(B, self.latent_size, device=self.device),
+                attention_mask,
+            ),
+            dim=1,
+        )
+        outputs = self.transformer.forward(
+            src=inputs,
+            src_key_padding_mask=attention_mask,
+            is_causal=False,
+        )
+        outputs = outputs[:, : self.latent_size, :]
+        return outputs
 
     def get_noised_latent(
         self, latents: torch.Tensor, timesteps: list[int]
