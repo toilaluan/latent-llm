@@ -171,7 +171,7 @@ class GPTLatentFlowMatching(nn.Module):
         hidden_size: int = 896,
         num_heads: int = 8,
         intermediate_size: int = 1536,
-        num_layers: int = 6,
+        num_layers: int = 24,
     ):
         super().__init__()
         self.model_name = model_name
