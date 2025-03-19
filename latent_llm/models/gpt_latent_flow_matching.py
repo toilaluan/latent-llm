@@ -268,12 +268,8 @@ class GPTLatentFlowMatching(nn.Module):
         Returns:
             Predicted vector field for the latents
         """
-        assert (
-            attention_mask.shape[1] == input_ids.shape[1]
-        ), "Attention mask shape mismatch"
-        assert latents.shape[0] == input_ids.shape[0], "Batch size mismatch"
         B, T, D = latents.shape
-        assert self.latent_shape == (T, D), "Latent shape mismatch"
+        attention_mask = attention_mask.bool()
         latents = latents.to(self.device)
         with torch.no_grad():
             text_output = self.model(
