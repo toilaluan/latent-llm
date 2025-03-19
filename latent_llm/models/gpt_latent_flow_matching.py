@@ -82,9 +82,9 @@ class Block(nn.Module):
         )
 
     def forward(self, x, cond):
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            self.adaptive_ln(cond).chunk(6, dim=-1)
-        )
+        adaln_output = self.adaptive_ln(cond).chunk(6, dim=-1)
+        print(adaln_output.shape)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_output
         x = x + gate_msa * self.attn(modulate(x, shift_msa, scale_msa))
         x = x + gate_mlp * self.ff(modulate(x, shift_mlp, scale_mlp))
         return x
@@ -288,6 +288,7 @@ class GPTLatentFlowMatching(nn.Module):
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
         context = text_embs + t_embs
         context = context.squeeze(1)
+        print(context.shape, latents.shape)
         x = self.transformer(latents, context)
         return x
 
