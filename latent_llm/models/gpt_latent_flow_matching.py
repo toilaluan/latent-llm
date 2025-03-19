@@ -15,38 +15,6 @@ from huggingface_hub import snapshot_download
 from peft import LoraConfig, get_peft_model, TaskType, PeftModel
 
 
-class TimestepEmbedder(nn.Module):
-    def __init__(self, hidden_size, frequency_embedding_size=256):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(frequency_embedding_size, hidden_size),
-            nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size),
-        )
-        self.frequency_embedding_size = frequency_embedding_size
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period) * torch.arange(start=0, end=half) / half
-        ).to(t.device)
-        args = t[:, None] * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat(
-                [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
-            )
-        return embedding
-
-    def forward(self, t):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(
-            dtype=next(self.parameters()).dtype
-        )
-        t_emb = self.mlp(t_freq)
-        return t_emb
-
-
 class GPTLatentFlowMatching(nn.Module):
     def __init__(
         self,
@@ -57,7 +25,6 @@ class GPTLatentFlowMatching(nn.Module):
         timestep_token_size: int = 4,
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
-        hidden_size: int = 896,
     ):
         super().__init__()
         self.model_name = model_name
@@ -68,36 +35,20 @@ class GPTLatentFlowMatching(nn.Module):
         self.torch_dtype = torch_dtype
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
-        self.base_config = AutoConfig.from_pretrained(model_name)
-        self.base_config.hidden_size = hidden_size
-        self.model = AutoModel.from_config(self.base_config).to(dtype=torch_dtype)
-
+        # self.base_config = AutoConfig.from_pretrained(model_name)
+        # self.base_config.hidden_size = hidden_size
+        # self.model = AutoModel.from_config(self.base_config).to(dtype=torch_dtype)
+        self.model = AutoModel.from_pretrained(model_name).to(dtype=torch_dtype)
         self.base_config = self.model.config
 
-        # Use SDXL-style timestep embeddings with multi-stage processing
-        timestep_dim = self.base_config.hidden_size
-
-        # Create timestep embedding module based on SDXL/Flux approaches
-        self.timestep_embedding = (
-            TimestepEmbedder(hidden_size=timestep_dim, frequency_embedding_size=256)
-            .to(self.device)
-            .to(dtype=self.torch_dtype)
+        self.timestep_proj = nn.Sequential(
+            nn.Linear(1, self.base_config.hidden_size),
+            nn.SiLU(),
+            nn.Linear(
+                self.base_config.hidden_size,
+                self.base_config.hidden_size,
+            ),
         )
-
-        # Additional projection to final token size
-        self.timestep_proj = (
-            nn.Linear(timestep_dim, timestep_token_size * self.base_config.hidden_size)
-            .to(self.device)
-            .to(dtype=self.torch_dtype)
-        )
-
-        # Initialize weights with commonly used initialization in diffusion models
-        for module in [self.timestep_embedding, self.timestep_proj]:
-            for m in module.modules():
-                if isinstance(m, nn.Linear):
-                    nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
-                    if m.bias is not None:
-                        nn.init.zeros_(m.bias)
 
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
@@ -116,12 +67,11 @@ class GPTLatentFlowMatching(nn.Module):
         nn.init.normal_(self.x1, mean=0.0, std=0.02)
 
         # Initialize timestep embedding modules with Kaiming initialization
-        for module in [self.timestep_embedding, self.timestep_proj]:
-            for m in module.modules():
-                if isinstance(m, nn.Linear):
-                    nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
-                    if m.bias is not None:
-                        nn.init.zeros_(m.bias)
+        for m in self.timestep_embedding.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, a=0, mode="fan_in")
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
 
         # Initialize transformer components if not pretrained
         # Note: For many pretrained models, this will be overridden by loaded weights
@@ -137,7 +87,7 @@ class GPTLatentFlowMatching(nn.Module):
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
-        Get timestep embeddings using SDXL-style sinusoidal positional encoding.
+        Get timestep embeddings using a simple MLP.
 
         Args:
             timesteps: List of timesteps, one per batch item
@@ -151,13 +101,10 @@ class GPTLatentFlowMatching(nn.Module):
         ).to(dtype=self.torch_dtype)
 
         # Get embeddings through the timestep embedding module
-        t_embs = self.timestep_embedding(timesteps_tensor)
+        t_embs = self.timestep_proj(timesteps_tensor)
 
-        # Project to final size and reshape
-        t_embs = self.timestep_proj(t_embs)
-
-        # Reshape to [B, timestep_token_size, D]
-        return t_embs.view(-1, self.timestep_token_size, self.base_config.hidden_size)
+        # Reshape to [B, 1, D]
+        return t_embs.view(-1, 1, self.base_config.hidden_size)
 
     def forward(
         self,
