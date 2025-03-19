@@ -210,19 +210,20 @@ class GPTLatentFlowMatching(nn.Module):
             dim_modalities=(hidden_size, self.model.config.hidden_size),
             dim_cond=256,
         ).to(dtype=torch_dtype)
-        self.transformer = nn.TransformerEncoder(
-            nn.TransformerEncoderLayer(
-                d_model=hidden_size,
-                nhead=num_heads,
-                dim_feedforward=intermediate_size,
-                batch_first=True,
-            ),
-            num_layers=num_layers,
+        # self.transformer = nn.TransformerEncoder(
+        #     nn.TransformerEncoderLayer(
+        #         d_model=hidden_size,
+        #         nhead=num_heads,
+        #         dim_feedforward=intermediate_size,
+        #         batch_first=True,
+        #     ),
+        #     num_layers=num_layers,
+        # ).to(dtype=torch_dtype)
+        self.latent_proj = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size),
+            nn.SiLU(),
+            nn.Linear(hidden_size, self.latent_size),
         ).to(dtype=torch_dtype)
-        self.latent_proj = nn.Linear(hidden_size, hidden_size).to(dtype=torch_dtype)
-        self.text_proj = nn.Linear(self.model.config.hidden_size, hidden_size).to(
-            dtype=torch_dtype
-        )
         # Initialize all model weights
         self.initialize_weights()
 
@@ -304,21 +305,21 @@ class GPTLatentFlowMatching(nn.Module):
             time_cond=t_embs,
         )
         latents = self.latent_proj(latents)  # B T_latent D
-        text_embs = self.text_proj(text_embs)  # B T_text D
-        inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
-        attention_mask = torch.cat(
-            (
-                torch.ones(B, self.latent_size, device=self.device),
-                attention_mask,
-            ),
-            dim=1,
-        )
-        outputs = self.transformer.forward(
-            src=inputs,
-            is_causal=False,
-        )
-        outputs = outputs[:, : self.latent_size, :]
-        return outputs
+        # text_embs = self.text_proj(text_embs)  # B T_text D
+        # inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
+        # attention_mask = torch.cat(
+        #     (
+        #         torch.ones(B, self.latent_size, device=self.device),
+        #         attention_mask,
+        #     ),
+        #     dim=1,
+        # )
+        # outputs = self.transformer.forward(
+        #     src=inputs,
+        #     is_causal=False,
+        # )
+        # outputs = outputs[:, : self.latent_size, :]
+        return latents
 
     def get_noised_latent(
         self, latents: torch.Tensor, timesteps: list[int]
