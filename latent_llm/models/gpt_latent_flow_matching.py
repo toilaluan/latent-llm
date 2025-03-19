@@ -91,6 +91,7 @@ class Block(nn.Module):
 
 class OutputLayer(nn.Module):
     def __init__(self, hidden_size):
+        super().__init__()
         self.ln = nn.LayerNorm(hidden_size)
         self.out = nn.Linear(hidden_size, hidden_size)
         self.adaptive_ln = nn.Sequential(
