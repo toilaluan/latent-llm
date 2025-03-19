@@ -43,6 +43,7 @@ class TextCompletionDataset(Dataset):
         from datasets import load_dataset
 
         self.dataset = load_dataset(dataset_id, split=split)
+        self.dataset = self.dataset.select(range(10))
         self.tokenizer_prefix = tokenizer_prefix
         self.tokenizer_suffix = tokenizer_suffix
         self.block_size = block_size

@@ -229,17 +229,17 @@ class GPTLatentFlowMatching(nn.Module):
         sigmas = sigmas.unsqueeze(-1)
 
         # Use learned x1 as target instead of random noise
-        target = (
+        z1 = (
             self.x1.unsqueeze(0)
             .expand(B, -1, -1)
             .to(device=self.device, dtype=self.torch_dtype)
         )
 
         # Interpolate between source and learned target
-        noised_latents = (1.0 - sigmas) * latents + sigmas * target
+        noised_latents = (1.0 - sigmas) * latents + sigmas * z1
 
         # Target vector field now points toward learned x1
-        vector_field = target - latents
+        vector_field = z1 - latents
 
         return noised_latents, vector_field
 
