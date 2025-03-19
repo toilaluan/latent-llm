@@ -617,7 +617,6 @@ def main():
         max_steps=args.max_steps,
         device=device,
         torch_dtype=torch_dtype,
-        hidden_size=encoder.base_config.hidden_size,
     )
     flow_model.to(device)
 
