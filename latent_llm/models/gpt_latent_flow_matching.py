@@ -211,7 +211,7 @@ class GPTLatentFlowMatching(nn.Module):
                 self.model.config.hidden_size,
             ),
             dim_cond=256,
-        )
+        ).to(dtype=torch_dtype)
         # Initialize all model weights
         self.initialize_weights()
 
