@@ -219,7 +219,7 @@ class GPTLatentFlowMatching(nn.Module):
             timesteps=timesteps,
         )
 
-        return torch.mean((predicted_vector_field - target_vector_field) ** 2)
+        return F.mse_loss(predicted_vector_field, target_vector_field)
 
     def sample(
         self,
