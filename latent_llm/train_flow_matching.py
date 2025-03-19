@@ -68,7 +68,7 @@ class TextCompletionDataset(Dataset):
 
         # Split into prefix and suffix
         prefix_text = text[: self.block_size * 2]
-        suffix_text = text[self.block_size :]
+        suffix_text = text[self.block_size * 2 :]
 
         # Now tokenize the prefix and suffix with their respective tokenizers
         prefix_tokens = self.tokenizer_prefix(
