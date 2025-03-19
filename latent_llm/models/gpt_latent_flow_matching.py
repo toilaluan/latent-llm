@@ -206,7 +206,10 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.transformer = MMDiT(
             depth=num_layers,
-            dim_modalities=(self.model.config.hidden_size),
+            dim_modalities=(
+                hidden_size,
+                self.model.config.hidden_size,
+            ),
             dim_cond=256,
         )
         # Initialize all model weights
