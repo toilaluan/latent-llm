@@ -649,6 +649,8 @@ def main():
         lr=args.learning_rate,
         weight_decay=args.weight_decay,
     )
+    for name, p in flow_model.named_parameters():
+        print(name, p.shape)
 
     # Create save directory
     os.makedirs(args.save_path, exist_ok=True)
