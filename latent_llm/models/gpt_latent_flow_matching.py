@@ -180,6 +180,7 @@ class GPTLatentFlowMatching(nn.Module):
         self.torch_dtype = torch_dtype
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
+        self.hidden_size = hidden_size
         self.model = AutoModel.from_pretrained(model_name).to(dtype=torch_dtype)
         self.text_model_config = self.model.config
 
