@@ -316,7 +316,6 @@ class GPTLatentFlowMatching(nn.Module):
         print(inputs.shape)
         outputs = self.transformer.forward(
             src=inputs,
-            mask=attention_mask,
             is_causal=False,
         )
         outputs = outputs[:, : self.latent_size, :]
