@@ -47,6 +47,7 @@ class Attention(nn.Module):
         output = F.scaled_dot_product_attention(q, k, v, attn_mask=None)
         output = output.view(B, T, C)
         output = self.out_proj(output)
+        print(output.shape)
         return output
 
 
