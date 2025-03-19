@@ -86,7 +86,7 @@ class TextCompletionDataset(Dataset):
         # Load dataset
         dataset = load_dataset(self.dataset_id, split=self.split)
         dataset = dataset.select(
-            range(10)
+            range(1)
         )  # Keep this selection for debug/quick testing
 
         # Process all examples
