@@ -221,8 +221,8 @@ class GPTLatentFlowMatching(nn.Module):
         for p in self.model.parameters():
             p.requires_grad = False
 
-        for p in self.transformer.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.transformer.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
         for p in self.timestep_proj.parameters():
             nn.init.normal_(p, mean=0.0, std=0.02)
