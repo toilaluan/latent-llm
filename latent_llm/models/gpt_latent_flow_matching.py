@@ -288,6 +288,7 @@ class GPTLatentFlowMatching(nn.Module):
             output_hidden_states=True,
         )
         text_cond = text_output.last_hidden_state
+        print(text_cond.shape)
         text_cond = torch.mean(text_cond, dim=1)
         text_embs = self.text_proj(text_cond)  # B 1 D
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
