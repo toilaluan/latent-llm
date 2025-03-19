@@ -297,7 +297,6 @@ def train_step(
 
     # Sample random timesteps
     batch_size = suffix_tokens.size(0)
-    print(suffix_latents.shape)
     optimizer.zero_grad()
 
     timesteps = torch.randint(
