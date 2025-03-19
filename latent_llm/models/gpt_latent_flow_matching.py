@@ -187,7 +187,7 @@ class GPTLatentFlowMatching(nn.Module):
 
         self.text_proj = nn.Linear(
             self.text_model_config.hidden_size, hidden_size, bias=False
-        )
+        ).to(dtype=torch_dtype)
 
         self.timestep_proj = TimestepEmbedder(
             hidden_size=hidden_size,
