@@ -207,7 +207,7 @@ class GPTLatentFlowMatching(nn.Module):
             num_heads=num_heads,
             intermediate_size=intermediate_size,
             num_layers=num_layers,
-        )
+        ).to(dtype=torch_dtype)
         # Initialize all model weights
         self.initialize_weights()
 
