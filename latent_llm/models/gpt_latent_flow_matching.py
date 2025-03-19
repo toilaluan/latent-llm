@@ -130,7 +130,7 @@ class TransformerModel(nn.Module):
     def forward(self, x, context):
         for block in self.blocks:
             x = block(x, context)
-        return self.output_layer(x)
+        return self.output_layer(x, context)
 
 
 class TimestepEmbedder(nn.Module):
