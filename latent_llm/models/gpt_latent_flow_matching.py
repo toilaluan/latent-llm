@@ -47,7 +47,6 @@ class Attention(nn.Module):
         output = F.scaled_dot_product_attention(q, k, v, attn_mask=None)
         output = output.view(B, T, C)
         output = self.out_proj(output)
-        print(output.shape)
         return output
 
 
@@ -65,7 +64,6 @@ class FeedForward(nn.Module):
 
 
 def modulate(x, shift, scale):
-    print(x.shape, shift.shape, scale.shape)
     return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
 
 
@@ -84,15 +82,11 @@ class Block(nn.Module):
 
     def forward(self, x, cond):
         adaln_output = self.adaptive_ln(cond)
-        print(adaln_output.shape)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             adaln_output.chunk(6, dim=-1)
         )
-        print("Block", x.shape, gate_msa.shape, gate_mlp.shape)
         x = x + gate_msa.unsqueeze(1) * self.attn(modulate(x, shift_msa, scale_msa))
-        print("Block/1", x.shape)
         x = x + gate_mlp.unsqueeze(1) * self.ff(modulate(x, shift_mlp, scale_mlp))
-        print("Block/2", x.shape)
         return x
 
 
@@ -110,7 +104,6 @@ class OutputLayer(nn.Module):
         shift, scale = self.adaptive_ln(context).chunk(2, dim=-1)
         x = modulate(self.ln(x), shift, scale)
         x = self.out(x)
-        print("Output", x.shape)
         return x
 
 
@@ -247,15 +240,12 @@ class GPTLatentFlowMatching(nn.Module):
             Tensor of shape [B, 1, D] containing timestep embeddings
         """
         # Convert timesteps to tensor
-        print(timesteps)
         timesteps_tensor = torch.tensor(timesteps, device=self.device).to(
             dtype=self.torch_dtype
         )
 
         # Get embeddings through the timestep embedder
         t_embs = self.timestep_proj(timesteps_tensor)
-
-        print(t_embs.shape)
 
         # Reshape to [B, 1, D]
         return t_embs
@@ -283,7 +273,6 @@ class GPTLatentFlowMatching(nn.Module):
             attention_mask.shape[1] == input_ids.shape[1]
         ), "Attention mask shape mismatch"
         assert latents.shape[0] == input_ids.shape[0], "Batch size mismatch"
-        print(latents.shape)
         B, T, D = latents.shape
         assert self.latent_shape == (T, D), "Latent shape mismatch"
         latents = latents.to(self.device)
@@ -294,17 +283,11 @@ class GPTLatentFlowMatching(nn.Module):
             output_hidden_states=True,
         )
         text_cond = text_output.last_hidden_state
-        print(text_cond.shape)
         text_cond = torch.mean(text_cond, dim=1)
-        print(text_cond.shape)
         text_embs = self.text_proj(text_cond)  # B 1 D
-        print(text_embs.shape)
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
-        print(t_embs.shape)
         context = text_embs + t_embs
-        print(context.shape)
         context = context.squeeze(1)
-        print(context.shape, latents.shape)
         x = self.transformer(latents, context)
         return x
 
@@ -406,7 +389,7 @@ class GPTLatentFlowMatching(nn.Module):
                 (timesteps[i] - timesteps[i + 1]).float() / self.max_steps
             )
         step_sizes.append(timesteps[-1].float() / self.max_steps)  # Last step
-        print("Timesteps: ", timesteps)
+
         # Integration loop
         for i, step in enumerate(timesteps):
             # Current timestep for all items in batch
@@ -421,10 +404,6 @@ class GPTLatentFlowMatching(nn.Module):
                     timesteps=batch_timesteps,
                 )
             current_latent = current_latent - step_sizes[i] * vector_field
-
-            print(
-                f"step {step}: {current_latent.mean().item():.4f}, {current_latent.std().item():.4f}"
-            )
 
         return current_latent
 
