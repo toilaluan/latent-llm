@@ -219,7 +219,9 @@ class GPTLatentFlowMatching(nn.Module):
         #     ),
         #     num_layers=num_layers,
         # ).to(dtype=torch_dtype)
-        self.latent_proj = FeedForward(hidden_size, hidden_size * 2)
+        self.latent_proj = FeedForward(hidden_size, hidden_size * 2).to(
+            dtype=torch_dtype
+        )
         # Initialize all model weights
         self.initialize_weights()
 
