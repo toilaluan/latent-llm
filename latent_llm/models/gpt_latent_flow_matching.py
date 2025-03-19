@@ -290,9 +290,13 @@ class GPTLatentFlowMatching(nn.Module):
         text_cond = text_output.last_hidden_state
         print(text_cond.shape)
         text_cond = torch.mean(text_cond, dim=1)
+        print(text_cond.shape)
         text_embs = self.text_proj(text_cond)  # B 1 D
+        print(text_embs.shape)
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
+        print(t_embs.shape)
         context = text_embs + t_embs
+        print(context.shape)
         context = context.squeeze(1)
         print(context.shape, latents.shape)
         x = self.transformer(latents, context)
