@@ -5,6 +5,7 @@ from transformers import (
     AutoConfig,
     AutoModel,
 )
+from mmdit.mmdit_generalized_pytorch import MMDiT
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -132,7 +133,7 @@ class TimestepEmbedder(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(frequency_embedding_size, hidden_size),
             nn.SiLU(),
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, frequency_embedding_size),
         )
         self.frequency_embedding_size = frequency_embedding_size
 
@@ -203,12 +204,11 @@ class GPTLatentFlowMatching(nn.Module):
             requires_grad=True,
         )
 
-        self.transformer = TransformerModel(
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            intermediate_size=intermediate_size,
-            num_layers=num_layers,
-        ).to(dtype=torch_dtype)
+        self.transformer = MMDiT(
+            depth=num_layers,
+            dim_modalities=(self.model.config.hidden_size),
+            dim_cond=256,
+        )
         # Initialize all model weights
         self.initialize_weights()
 
@@ -285,10 +285,14 @@ class GPTLatentFlowMatching(nn.Module):
         text_cond = torch.mean(text_cond, dim=1)
         text_embs = self.text_proj(text_cond)  # B 1 D
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
-        context = text_embs + t_embs
-        context = context.squeeze(1)
-        x = self.transformer(latents, context)
-        return x
+        print(latents.shape, t_embs.shape, text_embs.shape)
+
+        latents, text_embs, t_embs = self.transformer(
+            modality_tokens=(latents, text_embs),
+            modality_masks=(None, attention_mask),
+            time_cond=t_embs,
+        )
+        return latents
 
     def get_noised_latent(
         self, latents: torch.Tensor, timesteps: list[int]

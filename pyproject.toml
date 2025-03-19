@@ -10,6 +10,7 @@ dependencies = [
     "diffusers>=0.32.2",
     "einops>=0.8.1",
     "hf-transfer>=0.1.9",
+    "mmdit>=0.2.2",
     "mnemonic>=0.21",
     "nltk>=3.9.1",
     "numpy>=2.2.3",
