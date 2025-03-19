@@ -231,20 +231,20 @@ class GPTLatentFlowMatching(nn.Module):
         # Initialize x1 learnable parameter
         nn.init.normal_(self.x1, mean=0.0, std=0.02)
 
-        for p in self.transformer.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.transformer.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
-        for p in self.timestep_proj.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.timestep_proj.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
-        for p in self.text_proj.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.text_proj.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
-        for p in self.latent_proj.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.latent_proj.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
-        for p in self.mmdit.parameters():
-            nn.init.normal_(p, mean=0.0, std=0.02)
+        # for p in self.mmdit.parameters():
+        #     nn.init.normal_(p, mean=0.0, std=0.02)
 
     def get_timestep_tokens(self, timesteps: list[int]) -> torch.Tensor:
         """
