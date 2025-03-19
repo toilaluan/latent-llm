@@ -223,6 +223,9 @@ class GPTLatentFlowMatching(nn.Module):
             nn.Linear(hidden_size, hidden_size),
             nn.SiLU(),
             nn.Linear(hidden_size, self.latent_size),
+            nn.LayerNorm(self.latent_size),
+            nn.SiLU(),
+            nn.Linear(self.latent_size, self.latent_size),
         ).to(dtype=torch_dtype)
         # Initialize all model weights
         self.initialize_weights()
