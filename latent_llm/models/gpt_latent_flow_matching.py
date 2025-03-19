@@ -242,6 +242,7 @@ class GPTLatentFlowMatching(nn.Module):
             Tensor of shape [B, 1, D] containing timestep embeddings
         """
         # Convert timesteps to tensor
+        print(timesteps)
         timesteps_tensor = torch.tensor(timesteps, device=self.device).to(
             dtype=self.torch_dtype
         )
