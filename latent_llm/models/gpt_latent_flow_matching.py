@@ -301,6 +301,7 @@ class GPTLatentFlowMatching(nn.Module):
             modality_masks=(None, attention_mask),
             time_cond=t_embs,
         )
+        print(latents.shape, text_embs.shape)
         latents = self.latent_proj(latents)  # B T_latent D
         text_embs = self.text_proj(text_embs)  # B T_text D
         inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
