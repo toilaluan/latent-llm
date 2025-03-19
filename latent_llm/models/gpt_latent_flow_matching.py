@@ -106,8 +106,8 @@ class OutputLayer(nn.Module):
             nn.Linear(hidden_size, hidden_size * 2),
         )
 
-    def forward(self, x):
-        shift, scale = self.adaptive_ln(x).chunk(2, dim=-1)
+    def forward(self, x, context):
+        shift, scale = self.adaptive_ln(context).chunk(2, dim=-1)
         x = modulate(self.ln(x), shift, scale)
         x = self.out(x)
         print("Output", x.shape)
