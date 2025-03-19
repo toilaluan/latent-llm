@@ -48,7 +48,7 @@ class GPTLatentFlowMatching(nn.Module):
                 self.base_config.hidden_size,
                 self.base_config.hidden_size,
             ),
-        )
+        ).to(dtype=torch_dtype)
 
         self.latent_shape = (self.latent_size, self.base_config.hidden_size)
 
