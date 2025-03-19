@@ -216,6 +216,7 @@ class GPTLatentFlowMatching(nn.Module):
                 d_model=hidden_size,
                 nhead=num_heads,
                 dim_feedforward=intermediate_size,
+                batch_first=True,
             ),
             num_layers=num_layers,
         ).to(dtype=torch_dtype)
