@@ -184,7 +184,9 @@ class GPTLatentFlowMatching(nn.Module):
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
         self.hidden_size = hidden_size
-        self.model = AutoModel.from_pretrained(model_name).to(dtype=torch_dtype)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(
+            dtype=torch_dtype
+        )
         self.text_model_config = self.model.config
 
         self.text_proj = nn.Linear(
@@ -277,7 +279,7 @@ class GPTLatentFlowMatching(nn.Module):
                 attention_mask=attention_mask,
                 output_hidden_states=True,
             )
-        text_embs = text_output.last_hidden_state
+        text_embs = text_output.hidden_states[-1]
         t_embs = self.get_timestep_tokens(timesteps)  # B 1 D
 
         latents, text_embs = self.transformer(
