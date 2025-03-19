@@ -219,9 +219,7 @@ class GPTLatentFlowMatching(nn.Module):
             ),
             num_layers=num_layers,
         ).to(dtype=torch_dtype)
-        self.latent_proj = nn.Linear(hidden_size, self.latent_size).to(
-            dtype=torch_dtype
-        )
+        self.latent_proj = nn.Linear(hidden_size, hidden_size).to(dtype=torch_dtype)
         self.text_proj = nn.Linear(self.model.config.hidden_size, hidden_size).to(
             dtype=torch_dtype
         )
@@ -304,6 +302,7 @@ class GPTLatentFlowMatching(nn.Module):
         print(latents.shape, text_embs.shape)
         latents = self.latent_proj(latents)  # B T_latent D
         text_embs = self.text_proj(text_embs)  # B T_text D
+        print(latents.shape, text_embs.shape)
         inputs = torch.cat((latents, text_embs), dim=1)  # B T_latent + T_text D
         attention_mask = torch.cat(
             (
