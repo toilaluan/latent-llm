@@ -184,9 +184,9 @@ class GPTLatentFlowMatching(nn.Module):
         self.device = device
         self.tokenizer = get_tokenizer(model_name)
         self.hidden_size = hidden_size
-        self.model = AutoModelForCausalLM.from_pretrained(model_name).to(
-            dtype=torch_dtype
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name, attn_implementation="eager"
+        ).to(dtype=torch_dtype)
         self.text_model_config = self.model.config
 
         self.text_proj = nn.Linear(
