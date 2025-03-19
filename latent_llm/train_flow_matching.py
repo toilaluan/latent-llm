@@ -611,7 +611,7 @@ def main():
         device=device,
         torch_dtype=torch_dtype,
         hidden_size=encoder.base_config.hidden_size,
-        num_layers=24,
+        num_layers=12,
         num_heads=14,
         intermediate_size=1536,
     )
