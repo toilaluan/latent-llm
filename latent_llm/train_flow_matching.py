@@ -27,6 +27,8 @@ class TextCompletionDataset(Dataset):
         block_size: int = 1024,
         min_prefix_length: int = 10,
         max_prefix_ratio: float = 0.7,
+        cache_dir: str = "cached_datasets",
+        use_cache: bool = True,
     ):
         """
         Text completion dataset that splits text into prefix and suffix.
@@ -39,49 +41,97 @@ class TextCompletionDataset(Dataset):
             block_size: Maximum sequence length
             min_prefix_length: Minimum number of tokens in prefix
             max_prefix_ratio: Maximum ratio of prefix to total text length
+            cache_dir: Directory to cache tokenized datasets
+            use_cache: Whether to use cached tokenized datasets if available
         """
-        from datasets import load_dataset
-
-        self.dataset = load_dataset(dataset_id, split=split)
-        self.dataset = self.dataset.select(range(10))
+        self.dataset_id = dataset_id
+        self.split = split
         self.tokenizer_prefix = tokenizer_prefix
         self.tokenizer_suffix = tokenizer_suffix
         self.block_size = block_size
         self.min_prefix_length = min_prefix_length
         self.max_prefix_ratio = max_prefix_ratio
+        self.cache_dir = cache_dir
+        self.use_cache = use_cache
+
+        # Create cache directory if it doesn't exist
+        if self.use_cache:
+            os.makedirs(cache_dir, exist_ok=True)
+
+        # Generate cache file path
+        self.cache_file = self._get_cache_path()
+
+        # Either load from cache or process dataset
+        if self.use_cache and os.path.exists(self.cache_file):
+            print(f"Loading tokenized dataset from cache: {self.cache_file}")
+            self.tokenized_data = torch.load(self.cache_file)
+        else:
+            print(f"Processing dataset and creating cache: {self.cache_file}")
+            self._process_and_cache_dataset()
+
+    def _get_cache_path(self):
+        """Generate a unique cache file path based on dataset parameters."""
+        # Create a unique identifier based on dataset and tokenizer configurations
+        prefix_name = self.tokenizer_prefix.name_or_path.replace("/", "_")
+        suffix_name = self.tokenizer_suffix.name_or_path.replace("/", "_")
+        dataset_name = self.dataset_id.replace("/", "_")
+
+        cache_filename = f"{dataset_name}_{self.split}_{prefix_name}_{suffix_name}_{self.block_size}.pt"
+        return os.path.join(self.cache_dir, cache_filename)
+
+    def _process_and_cache_dataset(self):
+        """Process the dataset and cache tokenized results to disk."""
+        from datasets import load_dataset
+
+        # Load dataset
+        dataset = load_dataset(self.dataset_id, split=self.split)
+        dataset = dataset.select(
+            range(10)
+        )  # Keep this selection for debug/quick testing
+
+        # Process all examples
+        self.tokenized_data = []
+        for idx in tqdm(range(len(dataset)), desc="Tokenizing dataset"):
+            text = dataset[idx]["text"]
+
+            # Split into prefix and suffix
+            prefix_text = text[: self.block_size * 2]
+            suffix_text = text[self.block_size * 2 :]
+
+            # Tokenize the prefix and suffix with their respective tokenizers
+            prefix_tokens = self.tokenizer_prefix(
+                prefix_text,
+                truncation=True,
+                max_length=self.block_size,
+                padding="max_length",
+                return_tensors="pt",
+            ).input_ids[0]
+
+            suffix_tokens = self.tokenizer_suffix(
+                suffix_text,
+                truncation=True,
+                max_length=self.block_size,
+                padding="max_length",
+                return_tensors="pt",
+            ).input_ids[0]
+
+            self.tokenized_data.append(
+                {
+                    "prefix": prefix_tokens,
+                    "suffix": suffix_tokens,
+                }
+            )
+
+        # Save to cache if enabled
+        if self.use_cache:
+            print(f"Saving tokenized dataset to cache: {self.cache_file}")
+            torch.save(self.tokenized_data, self.cache_file)
 
     def __len__(self):
-        return len(self.dataset)
+        return len(self.tokenized_data)
 
     def __getitem__(self, idx):
-        # Get text from dataset
-        text = self.dataset[idx]["text"]
-
-        # Split into prefix and suffix
-        prefix_text = text[: self.block_size * 2]
-        suffix_text = text[self.block_size * 2 :]
-
-        # Now tokenize the prefix and suffix with their respective tokenizers
-        prefix_tokens = self.tokenizer_prefix(
-            prefix_text,
-            truncation=True,
-            max_length=self.block_size,
-            padding="max_length",
-            return_tensors="pt",
-        ).input_ids[0]
-
-        suffix_tokens = self.tokenizer_suffix(
-            suffix_text,
-            truncation=True,
-            max_length=self.block_size,
-            padding="max_length",
-            return_tensors="pt",
-        ).input_ids[0]
-
-        return {
-            "prefix": prefix_tokens,
-            "suffix": suffix_tokens,
-        }
+        return self.tokenized_data[idx]
 
 
 def parse_args():
@@ -631,6 +681,8 @@ def main():
         block_size=encoder_config["block_size"],
         min_prefix_length=args.min_prefix_length,
         max_prefix_ratio=args.max_prefix_ratio,
+        cache_dir=args.save_path,
+        use_cache=True,
     )
 
     print(dataset[0])
