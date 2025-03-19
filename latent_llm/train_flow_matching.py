@@ -351,8 +351,8 @@ def train_step(
         )
 
     # Save checkpoint
-    if global_step % args.checkpoint_interval == 0:
-        save_checkpoint(model, optimizer, global_step, args)
+    # if global_step % args.checkpoint_interval == 0:
+    #     save_checkpoint(model, optimizer, global_step, args)
 
     return loss.item(), dataloader_iter
 
