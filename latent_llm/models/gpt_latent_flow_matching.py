@@ -171,7 +171,7 @@ class GPTLatentFlowMatching(nn.Module):
         torch_dtype: torch.dtype = torch.bfloat16,
         device: str = "cuda",
         hidden_size: int = 896,
-        num_heads: int = 6,
+        num_heads: int = 8,
         intermediate_size: int = 1536,
         num_layers: int = 6,
     ):
