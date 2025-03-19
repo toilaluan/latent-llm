@@ -84,7 +84,9 @@ class Block(nn.Module):
     def forward(self, x, cond):
         adaln_output = self.adaptive_ln(cond)
         print(adaln_output.shape)
-        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_output.chunk(6, dim=-1)
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+            adaln_output.chunk(6, dim=-1)
+        )
         x = x + gate_msa * self.attn(modulate(x, shift_msa, scale_msa))
         x = x + gate_mlp * self.ff(modulate(x, shift_mlp, scale_mlp))
         return x
@@ -246,6 +248,8 @@ class GPTLatentFlowMatching(nn.Module):
 
         # Get embeddings through the timestep embedder
         t_embs = self.timestep_proj(timesteps_tensor)
+
+        print(t_embs.shape)
 
         # Reshape to [B, 1, D]
         return t_embs.unsqueeze(1)
