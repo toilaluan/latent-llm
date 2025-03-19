@@ -56,7 +56,7 @@ class FeedForward(nn.Module):
         super().__init__()
         self.up = nn.Linear(hidden_size, intermediate_size)
         self.down = nn.Linear(intermediate_size, hidden_size)
-        self.gate = nn.Linear(hidden_size, hidden_size)
+        self.gate = nn.Linear(hidden_size, intermediate_size)
 
     def forward(self, x):
         x = F.silu(self.gate(x)) * self.up(x)
