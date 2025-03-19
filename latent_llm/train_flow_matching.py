@@ -643,6 +643,9 @@ def main():
         collate_fn=collate_fn,
     )
 
+    for p in flow_model.model.parameters():
+        p.requires_grad = False
+
     # Create optimizer
     optimizer = torch.optim.AdamW(
         [p for p in flow_model.parameters() if p.requires_grad],
