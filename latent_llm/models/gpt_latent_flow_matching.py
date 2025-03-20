@@ -210,15 +210,7 @@ class GPTLatentFlowMatching(nn.Module):
             dim_modalities=(hidden_size, self.model.config.hidden_size),
             dim_cond=256,
         ).to(dtype=torch_dtype)
-        # self.transformer = nn.TransformerEncoder(
-        #     nn.TransformerEncoderLayer(
-        #         d_model=hidden_size,
-        #         nhead=num_heads,
-        #         dim_feedforward=intermediate_size,
-        #         batch_first=True,
-        #     ),
-        #     num_layers=num_layers,
-        # ).to(dtype=torch_dtype)
+
         self.latent_proj = FeedForward(hidden_size, hidden_size * 2).to(
             dtype=torch_dtype
         )
@@ -342,11 +334,12 @@ class GPTLatentFlowMatching(nn.Module):
         sigmas = sigmas.unsqueeze(-1)
 
         # Use learned x1 as target instead of random noise
-        z1 = (
-            self.x1.unsqueeze(0)
-            .expand(B, -1, -1)
-            .to(device=self.device, dtype=self.torch_dtype)
-        )
+        # z1 = (
+        #     self.x1.unsqueeze(0)
+        #     .expand(B, -1, -1)
+        #     .to(device=self.device, dtype=self.torch_dtype)
+        # )
+        z1 = torch.randn_like(latents)
 
         # Interpolate between source and learned target
         noised_latents = (1.0 - sigmas) * latents + sigmas * z1
@@ -400,7 +393,8 @@ class GPTLatentFlowMatching(nn.Module):
             Sampled latent vectors
         """
         B = input_ids.shape[0]
-        initial_noise = self.x1.unsqueeze(0).expand(B, -1, -1)
+        # initial_noise = self.x1.unsqueeze(0).expand(B, -1, -1)
+        initial_noise = torch.randn(B, self.latent_size, self.hidden_size)
         initial_noise = initial_noise.to(self.device, dtype=self.torch_dtype)
         input_ids = input_ids.to(self.device)
         attention_mask = (input_ids != self.tokenizer.pad_token_id).long()
