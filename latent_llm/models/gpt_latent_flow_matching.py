@@ -426,7 +426,7 @@ class GPTLatentFlowMatching(nn.Module):
                     latents=current_latent,
                     timesteps=batch_timesteps,
                 )
-            current_latent = current_latent + step_sizes[i] * vector_field
+            current_latent = current_latent - step_sizes[i] * vector_field
 
         return current_latent
 
