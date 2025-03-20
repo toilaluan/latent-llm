@@ -14,7 +14,7 @@ from latent_llm.models.gpt_latent_flow_matching import GPTLatentFlowMatching
 from latent_llm.data.text_dataset import TextDataset
 
 VAE_SHIFT = 0
-VAE_SCALE = 0.7
+VAE_SCALE = 2.5
 
 
 class TextCompletionDataset(Dataset):
@@ -397,7 +397,7 @@ def train_step(
     # if global_step % args.checkpoint_interval == 0:
     #     save_checkpoint(model, optimizer, global_step, args)
 
-    return loss.item(), dataloader_iter
+    return loss.item(), dataloader_iter, vae_mean, vae_std
 
 
 def evaluate(
@@ -716,7 +716,7 @@ def main():
     progress_bar = tqdm(total=args.num_steps, desc="Training")
 
     for step in range(args.num_steps):
-        loss, dataloader_iter = train_step(
+        loss, dataloader_iter, vae_mean, vae_std = train_step(
             flow_model,
             encoder,
             decoder,
@@ -731,7 +731,9 @@ def main():
         )
 
         progress_bar.update(1)
-        progress_bar.set_postfix({"loss": loss})
+        progress_bar.set_postfix(
+            {"loss": loss, "vae_mean": vae_mean, "vae_std": vae_std}
+        )
 
     # Save final model
     if args.use_wandb:
